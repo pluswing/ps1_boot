@@ -26,6 +26,19 @@ impl Interconnect {
     if addr % 4 != 0 {
       panic!("Unalignd store32 address: {:08X}", addr);
     }
+
+    if let Some(offset) = map::MEM_CONTROL.contains(addr) {
+      match offset {
+        0 => if val != 0x1F00_0000 {
+          panic!("Bad expansion 1 base address: 0x{:01X}", val);
+        }
+        4 => if val != 0x1F80_2000 {
+          panic!("Bad expansion 2 base address: 0x{:01X}", val);
+        }
+        _ => println!("Unhandled write to MEM_CONTROL register"),
+      }
+      return;
+    }
     panic!("unhandled store32 at address {:08X}", addr)
   }
 }
@@ -46,4 +59,5 @@ mod map {
   }
 
   pub const BIOS: Range = Range(0xBFC0_0000, 512 * 1024);
+  pub const MEM_CONTROL: Range = Range(0x1F80_1000, 36);
 }

@@ -66,7 +66,7 @@ impl Cpu {
   }
 
   fn op_sw(&mut self, instruction: Instruction) {
-    let i = instruction.imm();
+    let i = instruction.imm_se();
     let t = instruction.t();
     let s = instruction.s();
 
@@ -97,5 +97,11 @@ impl Instruction {
   fn imm(&self) -> u32 {
     let Instruction(op) = self;
     op & 0xFFFF
+  }
+
+  fn imm_se(&self) -> u32 {
+    let Instruction(op) = self;
+    let v = (op & 0xFFFF) as i16;
+    v as u32
   }
 }
