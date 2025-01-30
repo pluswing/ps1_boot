@@ -34,6 +34,10 @@ impl Cpu {
 
   fn decode_and_execute(&mut self, instruction: Instruction) {
     match instruction.function() {
+      0x000000 => match instruction.subfunction() {
+        0b000000 => self.op_sll(instruction),
+        _ => panic!("Unhandled instrcuntion {:08X}", instruction.0),
+      },
       0b001111 => self.op_lui(instruction),
       0b001101 => self.op_ori(instruction),
       0b101011 => self.op_sw(instruction),
@@ -74,6 +78,24 @@ impl Cpu {
     let v = self.reg(t);
     self.store32(addr, v);
   }
+
+  fn op_sll(&mut self, instruction: Instruction) {
+    let i = instruction.shift();
+    let t = instruction.t();
+    let d = instruction.d();
+
+    let v = self.reg(t) << i;
+    self.set_reg(d, v);
+  }
+
+  fn op_addiu(&mut self, instruction: Instruction) {
+    let i = instruction.imm_se();
+    let t = instruction.t();
+    let s = instruction.s();
+
+    let v = self.reg(s).wrapping_add(i);
+    self.set_reg(t, v);
+  }
 }
 
 struct Instruction(u32);
@@ -103,5 +125,20 @@ impl Instruction {
     let Instruction(op) = self;
     let v = (op & 0xFFFF) as i16;
     v as u32
+  }
+
+  fn d(&self) -> u32 {
+    let Instruction(op) = self;
+    (op >> 11) & 0x1F
+  }
+
+  fn subfunction(&self) -> u32 {
+    let Instruction(op) = self;
+    op & 0x3F
+  }
+
+  fn shift(&self) -> u32 {
+    let Instruction(op) = self;
+    (op >> 6) & 0x1F
   }
 }
