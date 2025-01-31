@@ -21,6 +21,7 @@ impl Cpu {
     let pc = self.pc;
     let instruction = self.load32(pc);
     self.pc = pc.wrapping_add(4);
+    println!("EXEC: 0x{:08X} => 0x{:08X} (f:0b{:06b})", self.pc, instruction, Instruction(instruction).function());
     self.decode_and_execute(Instruction(instruction));
   }
 
@@ -34,14 +35,22 @@ impl Cpu {
 
   fn decode_and_execute(&mut self, instruction: Instruction) {
     match instruction.function() {
-      0x000000 => match instruction.subfunction() {
+      0b000000 => match instruction.subfunction() {
         0b000000 => self.op_sll(instruction),
-        _ => panic!("Unhandled instrcuntion {:08X}", instruction.0),
+        0b101010 => {
+          // FIXME alu-reg
+        }
+        _ => panic!("Unhandled instrcuntion {:08X} (sub: 0b{:06b})", instruction.0, instruction.subfunction()),
       },
       0b001111 => self.op_lui(instruction),
       0b001101 => self.op_ori(instruction),
       0b101011 => self.op_sw(instruction),
-      _ => panic!("Unhandled instruction {:08X}", instruction.0),
+      0b001001 => self.op_addiu(instruction),
+      0b001000 => self.op_addiu(instruction), // FIXME
+      0b000101 => {
+        // FIXME
+      }
+      _ => panic!("Unhandled instruction {:08X} (f: 0b{:06b})", instruction.0, instruction.function()),
     }
   }
 
