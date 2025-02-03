@@ -4,6 +4,7 @@ pub struct Cpu {
   pc: u32,
   regs: [u32; 32],
   inter: Interconnect,
+  next_instruction: Instruction,
 }
 
 impl Cpu {
@@ -13,16 +14,18 @@ impl Cpu {
     Self {
       pc: 0xBFC0_0000,
       regs,
-      inter
+      inter,
+      next_instruction: Instruction(0), // NOP
     }
   }
 
   pub fn run_next_instruction(&mut self) {
     let pc = self.pc;
-    let instruction = self.load32(pc);
+    let instruction = self.next_instruction;
+    self.next_instruction = Instruction(self.load32(pc));
+    println!("EXEC: 0x{:08X} => 0x{:08X} (f:0b{:06b})", self.pc, instruction.0, instruction.function());
     self.pc = pc.wrapping_add(4);
-    println!("EXEC: 0x{:08X} => 0x{:08X} (f:0b{:06b})", self.pc, instruction, Instruction(instruction).function());
-    self.decode_and_execute(Instruction(instruction));
+    self.decode_and_execute(instruction);
   }
 
   fn load32(&self, addr: u32) -> u32 {
@@ -37,19 +40,14 @@ impl Cpu {
     match instruction.function() {
       0b000000 => match instruction.subfunction() {
         0b000000 => self.op_sll(instruction),
-        0b101010 => {
-          // FIXME alu-reg
-        }
         _ => panic!("Unhandled instrcuntion {:08X} (sub: 0b{:06b})", instruction.0, instruction.subfunction()),
       },
       0b001111 => self.op_lui(instruction),
       0b001101 => self.op_ori(instruction),
       0b101011 => self.op_sw(instruction),
       0b001001 => self.op_addiu(instruction),
-      0b001000 => self.op_addiu(instruction), // FIXME
-      0b000101 => {
-        // FIXME
-      }
+      0b001000 => self.op_addiu(instruction),
+      0b000010 => self.op_j(instruction), // 0b00001x
       _ => panic!("Unhandled instruction {:08X} (f: 0b{:06b})", instruction.0, instruction.function()),
     }
   }
@@ -105,8 +103,15 @@ impl Cpu {
     let v = self.reg(s).wrapping_add(i);
     self.set_reg(t, v);
   }
+
+  fn op_j(&mut self, instruction: Instruction) {
+    let i = instruction.imm_jump();
+    self.pc = (self.pc & 0xF000_0000) | (i << 2);
+  }
+
 }
 
+#[derive(Debug, Clone, Copy)]
 struct Instruction(u32);
 
 impl Instruction {
@@ -150,4 +155,10 @@ impl Instruction {
     let Instruction(op) = self;
     (op >> 6) & 0x1F
   }
+
+  fn imm_jump(&self) -> u32 {
+    let Instruction(op) = self;
+    op & 0x03FF_FFFF
+  }
+
 }
