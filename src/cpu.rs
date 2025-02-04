@@ -40,6 +40,7 @@ impl Cpu {
     match instruction.function() {
       0b000000 => match instruction.subfunction() {
         0b000000 => self.op_sll(instruction),
+        0b100101 => self.op_or(instruction), // 0b10xxxx
         _ => panic!("Unhandled instrcuntion {:08X} (sub: 0b{:06b})", instruction.0, instruction.subfunction()),
       },
       0b001111 => self.op_lui(instruction),
@@ -52,12 +53,12 @@ impl Cpu {
     }
   }
 
-  fn reg(&self, index: u32) -> u32 {
-    self.regs[index as usize]
+  fn reg(&self, index: RegisterIndex) -> u32 {
+    self.regs[index.0 as usize]
   }
 
-  fn set_reg(&mut self, index: u32, val: u32) {
-    self.regs[index as usize] = val;
+  fn set_reg(&mut self, index: RegisterIndex, val: u32) {
+    self.regs[index.0 as usize] = val;
     self.regs[0] = 0;
   }
 
@@ -109,7 +110,18 @@ impl Cpu {
     self.pc = (self.pc & 0xF000_0000) | (i << 2);
   }
 
+  fn op_or(&mut self, instruction: Instruction) {
+    let d = instruction.d();
+    let s = instruction.s();
+    let t = instruction.t();
+
+    let v = self.reg(s) | self.reg(t);
+    self.set_reg(d, v);
+  }
+
 }
+
+struct RegisterIndex(u32);
 
 #[derive(Debug, Clone, Copy)]
 struct Instruction(u32);
@@ -120,14 +132,14 @@ impl Instruction {
     op >> 26
   }
 
-  fn s(&self) -> u32 {
+  fn s(&self) -> RegisterIndex {
     let Instruction(op) = self;
-    (op >> 21) & 0x1F
+    RegisterIndex((op >> 21) & 0x1F)
   }
 
-  fn t(&self) -> u32 {
+  fn t(&self) -> RegisterIndex {
     let Instruction(op) = self;
-    (op >> 16) & 0x1F
+    RegisterIndex((op >> 16) & 0x1F)
   }
 
   fn imm(&self) -> u32 {
@@ -141,9 +153,9 @@ impl Instruction {
     v as u32
   }
 
-  fn d(&self) -> u32 {
+  fn d(&self) -> RegisterIndex {
     let Instruction(op) = self;
-    (op >> 11) & 0x1F
+    RegisterIndex((op >> 11) & 0x1F)
   }
 
   fn subfunction(&self) -> u32 {

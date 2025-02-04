@@ -40,7 +40,11 @@ impl Interconnect {
       return;
     }
     if let Some(_) = map::RAM_SIZE.contains(addr) {
-      // 無視する
+      println!("write to RAM_SIZE register {:08X}", addr);
+      return;
+    }
+    if let Some(_) = map::CACHE_CONTROL.contains(addr) {
+      println!("write to CACHE_CONTROL register {:08X}", addr);
       return;
     }
     panic!("unhandled store32 at address {:08X}", addr)
@@ -65,4 +69,5 @@ mod map {
   pub const BIOS: Range = Range(0xBFC0_0000, 512 * 1024);
   pub const MEM_CONTROL: Range = Range(0x1F80_1000, 36);
   pub const RAM_SIZE: Range = Range(0x1F80_1060, 4);
+  pub const CACHE_CONTROL: Range = Range(0xFFFE_0130, 4);
 }
