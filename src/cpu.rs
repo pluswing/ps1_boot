@@ -5,6 +5,9 @@ pub struct Cpu {
   regs: [u32; 32],
   inter: Interconnect,
   next_instruction: Instruction,
+
+  // COP0
+  sr: u32,
 }
 
 impl Cpu {
@@ -16,6 +19,7 @@ impl Cpu {
       regs,
       inter,
       next_instruction: Instruction(0), // NOP
+      sr: 0,
     }
   }
 
@@ -49,6 +53,9 @@ impl Cpu {
       0b001001 => self.op_addiu(instruction),
       0b001000 => self.op_addiu(instruction),
       0b000010 => self.op_j(instruction), // 0b00001x
+      0b000101 => self.op_bne(instruction),
+      // 0b000100 => , // beq
+      0b010000 => self.op_cop0(instruction),
       _ => panic!("Unhandled instruction {:08X} (f: 0b{:06b})", instruction.0, instruction.function()),
     }
   }
@@ -119,6 +126,43 @@ impl Cpu {
     self.set_reg(d, v);
   }
 
+  fn op_cop0(&mut self, instruction: Instruction) {
+    match instruction.cop_opcode() {
+      0b00100 => self.op_mtc0(instruction),
+      _ => panic!("Unhandled cop0 instruction {:08X} (op: 0b{:06b})", instruction.0, instruction.cop_opcode()),
+    }
+  }
+
+  fn op_mtc0(&mut self, instruction: Instruction) {
+    let cpu_r = instruction.t();
+    let cop_r = instruction.d().0;
+
+    let v = self.reg(cpu_r);
+
+    match cop_r {
+      12 => self.sr = v,
+      n => panic!("Unhandled cop0 register: {:08X}", n),
+    }
+  }
+
+  fn branch(&mut self, offset: u32) {
+    let offset = offset << 2;
+    let mut pc = self.pc;
+    pc = pc.wrapping_add(offset);
+    pc = pc.wrapping_sub(4);
+    self.pc = pc;
+  }
+
+  fn op_bne(&mut self, instruction: Instruction) {
+    let i = instruction.imm_se();
+    let s = instruction.s();
+    let t = instruction.t();
+
+    if self.reg(s) != self.reg(t) {
+      self.branch(i);
+    }
+  }
+
 }
 
 struct RegisterIndex(u32);
@@ -171,6 +215,11 @@ impl Instruction {
   fn imm_jump(&self) -> u32 {
     let Instruction(op) = self;
     op & 0x03FF_FFFF
+  }
+
+  fn cop_opcode(&self) -> u32 {
+    let Instruction(op) = self;
+    (op >> 21) & 0x1F
   }
 
 }
