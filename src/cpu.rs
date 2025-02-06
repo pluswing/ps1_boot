@@ -44,18 +44,18 @@ impl Cpu {
     match instruction.function() {
       0b000000 => match instruction.subfunction() {
         0b000000 => self.op_sll(instruction),
-        0b100101 => self.op_or(instruction), // 0b10xxxx
+        0b100101 => self.op_or(instruction),
         _ => panic!("Unhandled instrcuntion {:08X} (sub: 0b{:06b})", instruction.0, instruction.subfunction()),
       },
-      0b001111 => self.op_lui(instruction),
-      0b001101 => self.op_ori(instruction),
-      0b101011 => self.op_sw(instruction),
-      0b001001 => self.op_addiu(instruction),
-      0b001000 => self.op_addiu(instruction),
-      0b000010 => self.op_j(instruction), // 0b00001x
+      0b000010 => self.op_j(instruction),
       0b000101 => self.op_bne(instruction),
-      // 0b000100 => , // beq
+      0b001000 => self.op_addi(instruction),
+      0b001001 => self.op_addiu(instruction),
+      0b001101 => self.op_ori(instruction),
+      0b001111 => self.op_lui(instruction),
       0b010000 => self.op_cop0(instruction),
+      0b100011 => self.op_lw(instruction),
+      0b101011 => self.op_sw(instruction),
       _ => panic!("Unhandled instruction {:08X} (f: 0b{:06b})", instruction.0, instruction.function()),
     }
   }
@@ -161,6 +161,33 @@ impl Cpu {
     if self.reg(s) != self.reg(t) {
       self.branch(i);
     }
+  }
+
+  fn op_addi(&mut self, instruction: Instruction) {
+    let i: i32 = instruction.imm_se() as i32;
+    let t = instruction.t();
+    let s = instruction.s();
+
+    let s = self.reg(s) as i32;
+    let v = match s.checked_add(i) {
+      Some(v) => v as u32,
+      None => panic!("ADDI overflow"),
+    };
+    self.set_reg(t, v);
+  }
+
+  fn op_lw(&mut self, instruction: Instruction) {
+    if self.sr & 0x1_0000 != 0 {
+      println!("Ignoring load while cache is isolated");
+      return;
+    }
+    let i = instruction.imm_se();
+    let t = instruction.t();
+    let s = instruction.s();
+
+    let addr = self.reg(s).wrapping_add(i);
+    let v = self.load32(addr);
+    self.set_reg(t, v);
   }
 
 }
