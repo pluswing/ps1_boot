@@ -7,6 +7,7 @@ use interconnect::Interconnect;
 mod cpu;
 mod bios;
 mod interconnect;
+mod ram;
 
 fn main() {
   let bios = Bios::new(&Path::new("bios/BIOS.ROM")).unwrap();

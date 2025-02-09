@@ -3,11 +3,14 @@ use crate::interconnect::Interconnect;
 pub struct Cpu {
   pc: u32,
   regs: [u32; 32],
+  out_regs: [u32; 32],
   inter: Interconnect,
   next_instruction: Instruction,
 
   // COP0
   sr: u32,
+
+  load: (RegisterIndex, u32),
 }
 
 impl Cpu {
@@ -17,9 +20,11 @@ impl Cpu {
     Self {
       pc: 0xBFC0_0000,
       regs,
+      out_regs: regs,
       inter,
       next_instruction: Instruction(0), // NOP
       sr: 0,
+      load: (RegisterIndex(0), 0),
     }
   }
 
@@ -29,7 +34,12 @@ impl Cpu {
     self.next_instruction = Instruction(self.load32(pc));
     println!("EXEC: 0x{:08X} => 0x{:08X} (f:0b{:06b})", self.pc, instruction.0, instruction.function());
     self.pc = pc.wrapping_add(4);
+
+    let (reg, val) = self.load;
+    self.set_reg(reg, val);
+    self.load = (RegisterIndex(0), 0);
     self.decode_and_execute(instruction);
+    self.regs = self.out_regs;
   }
 
   fn load32(&self, addr: u32) -> u32 {
@@ -65,8 +75,8 @@ impl Cpu {
   }
 
   fn set_reg(&mut self, index: RegisterIndex, val: u32) {
-    self.regs[index.0 as usize] = val;
-    self.regs[0] = 0;
+    self.out_regs[index.0 as usize] = val;
+    self.out_regs[0] = 0;
   }
 
   fn op_lui(&mut self, instruction: Instruction) {
@@ -187,11 +197,12 @@ impl Cpu {
 
     let addr = self.reg(s).wrapping_add(i);
     let v = self.load32(addr);
-    self.set_reg(t, v);
+    self.load = (t, v);
   }
 
 }
 
+#[derive(Debug, Clone, Copy)]
 struct RegisterIndex(u32);
 
 #[derive(Debug, Clone, Copy)]
