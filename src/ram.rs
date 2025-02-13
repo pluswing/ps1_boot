@@ -4,7 +4,7 @@ pub struct Ram {
 
 impl Ram {
   pub fn new() -> Self {
-    let data = vec![0xCA, 2 * 1024 * 1024];
+    let data = vec![0xCA; 2 * 1024 * 1024];
     Ram { data }
   }
 
@@ -19,7 +19,7 @@ impl Ram {
     b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
   }
 
-  pub fn store32(&mut self, offset: u32, val: u32) -> u32 {
+  pub fn store32(&mut self, offset: u32, val: u32) {
     let offset = offset as usize;
 
     let b0 = val as u8;

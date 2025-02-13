@@ -55,6 +55,7 @@ impl Cpu {
       0b000000 => match instruction.subfunction() {
         0b000000 => self.op_sll(instruction),
         0b100101 => self.op_or(instruction),
+        0b001011 => self.op_sltu(instruction),
         _ => panic!("Unhandled instrcuntion {:08X} (sub: 0b{:06b})", instruction.0, instruction.subfunction()),
       },
       0b000010 => self.op_j(instruction),
@@ -150,7 +151,19 @@ impl Cpu {
     let v = self.reg(cpu_r);
 
     match cop_r {
+      3 | 5 | 6 | 7 | 9 | 11 => {
+        // breakpoint registers
+        if v != 0 {
+          panic!("Unhandled write to cop0r{}", cop_r)
+        }
+      }
       12 => self.sr = v,
+      13 => {
+        // CAUSE register
+        if v != 0 {
+          panic!("Unhandled write to CAUSE register.")
+        }
+      }
       n => panic!("Unhandled cop0 register: {:08X}", n),
     }
   }
@@ -198,6 +211,15 @@ impl Cpu {
     let addr = self.reg(s).wrapping_add(i);
     let v = self.load32(addr);
     self.load = (t, v);
+  }
+
+  fn op_sltu(&mut self, instruction: Instruction) {
+    let d = instruction.d();
+    let s = instruction.s();
+    let t = instruction.t();
+
+    let v = self.reg(s) < self.reg(t);
+    self.set_reg(d, v as u32);
   }
 
 }

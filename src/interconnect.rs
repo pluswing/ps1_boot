@@ -1,14 +1,16 @@
-use crate::bios::Bios;
+use crate::{bios::Bios, ram::Ram};
 
 
 pub struct Interconnect {
-  bios: Bios
+  bios: Bios,
+  ram: Ram,
 }
 
 impl Interconnect {
   pub fn new(bios: Bios) -> Self {
     Self {
       bios,
+      ram: Ram::new(),
     }
   }
 
@@ -18,6 +20,9 @@ impl Interconnect {
     }
     if let Some(offset) = map::BIOS.contains(addr) {
       return self.bios.load32(offset);
+    }
+    if let Some(offset) = map::RAM.contains(addr) {
+      return self.ram.load32(offset);
     }
     panic!("unhandled load32 at address {:08X}", addr);
   }
@@ -47,6 +52,10 @@ impl Interconnect {
       println!("write to CACHE_CONTROL register {:08X}", addr);
       return;
     }
+    if let Some(offset) = map::RAM.contains(addr) {
+      self.ram.store32(offset, val);
+      return;
+    }
     panic!("unhandled store32 at address {:08X}", addr)
   }
 }
@@ -70,4 +79,5 @@ mod map {
   pub const MEM_CONTROL: Range = Range(0x1F80_1000, 36);
   pub const RAM_SIZE: Range = Range(0x1F80_1060, 4);
   pub const CACHE_CONTROL: Range = Range(0xFFFE_0130, 4);
+  pub const RAM: Range = Range(0xA000_0000, 2 * 1024 * 1024);
 }
