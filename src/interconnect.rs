@@ -18,6 +18,8 @@ impl Interconnect {
     if addr % 4 != 0 {
       panic!("Unalignd load32 address: {:08X}", addr);
     }
+    let addr = mask_region(addr);
+
     if let Some(offset) = map::BIOS.contains(addr) {
       return self.bios.load32(offset);
     }
@@ -31,6 +33,7 @@ impl Interconnect {
     if addr % 4 != 0 {
       panic!("Unalignd store32 address: {:08X}", addr);
     }
+    let addr = mask_region(addr);
 
     if let Some(offset) = map::MEM_CONTROL.contains(addr) {
       match offset {
@@ -75,9 +78,25 @@ mod map {
     }
   }
 
-  pub const BIOS: Range = Range(0xBFC0_0000, 512 * 1024);
-  pub const MEM_CONTROL: Range = Range(0x1F80_1000, 36);
+  pub const RAM: Range = Range(0x0000_0000, 2 * 1024 * 1024);
+  pub const BIOS: Range = Range(0x1FC0_0000, 512 * 1024);
+  pub const MEM_CONTROL: Range = Range(0x1F80_1000, 36); // SYS_CONTROL
   pub const RAM_SIZE: Range = Range(0x1F80_1060, 4);
   pub const CACHE_CONTROL: Range = Range(0xFFFE_0130, 4);
-  pub const RAM: Range = Range(0xA000_0000, 2 * 1024 * 1024);
+}
+
+const REGION_MASK: [u32; 8] = [
+  // KUSEG: 2048KB
+  0xFFFF_FFFF, 0xFFFF_FFFF, 0xFFFF_FFFF, 0xFFFF_FFFF,
+  // KSEG0: 512KB
+  0x7FFF_FFFF,
+  // KSEG1: 512KB
+  0x1FFF_FFFF,
+  // KSEG2: 1024KB
+  0xFFFF_FFFF, 0xFFFF_FFFF,
+];
+
+pub fn mask_region(addr: u32) -> u32 {
+  let index = (addr >> 29) as usize;
+  addr & REGION_MASK[index]
 }

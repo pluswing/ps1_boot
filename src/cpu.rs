@@ -56,6 +56,7 @@ impl Cpu {
         0b000000 => self.op_sll(instruction),
         0b100101 => self.op_or(instruction),
         0b001011 => self.op_sltu(instruction),
+        0b100001 => self.op_addu(instruction),
         _ => panic!("Unhandled instrcuntion {:08X} (sub: 0b{:06b})", instruction.0, instruction.subfunction()),
       },
       0b000010 => self.op_j(instruction),
@@ -220,6 +221,15 @@ impl Cpu {
 
     let v = self.reg(s) < self.reg(t);
     self.set_reg(d, v as u32);
+  }
+
+  fn op_addu(&mut self, instruction: Instruction) {
+    let s = instruction.s();
+    let t = instruction.t();
+    let d = instruction.d();
+
+    let v = self.reg(s).wrapping_add(self.reg(t));
+    self.set_reg(d, v);
   }
 
 }
