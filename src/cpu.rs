@@ -50,6 +50,14 @@ impl Cpu {
     self.inter.store32(addr, val)
   }
 
+  fn store16(&mut self, addr: u32, val: u16) {
+    self.inter.store16(addr, val)
+  }
+
+  fn store8(&mut self, addr: u32, val: u8) {
+    self.inter.store8(addr, val)
+  }
+
   fn decode_and_execute(&mut self, instruction: Instruction) {
     match instruction.function() {
       0b000000 => match instruction.subfunction() {
@@ -60,14 +68,17 @@ impl Cpu {
         _ => panic!("Unhandled instrcuntion {:08X} (sub: 0b{:06b})", instruction.0, instruction.subfunction()),
       },
       0b000010 => self.op_j(instruction),
+      0b000011 => self.op_jal(instruction),
       0b000101 => self.op_bne(instruction),
       0b001000 => self.op_addi(instruction),
       0b001001 => self.op_addiu(instruction),
+      0x001100 => self.op_andi(instruction),
       0b001101 => self.op_ori(instruction),
       0b001111 => self.op_lui(instruction),
       0b010000 => self.op_cop0(instruction),
       0b100011 => self.op_lw(instruction),
       0b101011 => self.op_sw(instruction),
+      0b101001 => self.op_sh(instruction),
       _ => panic!("Unhandled instruction {:08X} (f: 0b{:06b})", instruction.0, instruction.function()),
     }
   }
@@ -232,6 +243,52 @@ impl Cpu {
     self.set_reg(d, v);
   }
 
+  fn op_sh(&mut self, instruction: Instruction) {
+
+    if self.sr & 0x1_0000 != 0 {
+      println!("Ignoring store while cache is isolated");
+      return;
+    }
+
+    let i = instruction.imm_se();
+    let t = instruction.t();
+    let s = instruction.s();
+
+    let addr = self.reg(s).wrapping_add(i);
+    let v = self.reg(t);
+    self.store16(addr, v as u16);
+  }
+
+  fn op_jal(&mut self, instruction: Instruction) {
+    let ra = self.pc;
+    self.set_reg(RegisterIndex(31), ra);
+    self.op_j(instruction);
+  }
+
+  fn op_andi(&mut self, instruction: Instruction) {
+    let i = instruction.imm();
+    let t = instruction.t();
+    let s = instruction.s();
+    let v = self.reg(s) & i;
+    self.set_reg(t, v);
+  }
+
+
+  fn op_sb(&mut self, instruction: Instruction) {
+
+    if self.sr & 0x1_0000 != 0 {
+      println!("Ignoring store while cache is isolated");
+      return;
+    }
+
+    let i = instruction.imm_se();
+    let t = instruction.t();
+    let s = instruction.s();
+
+    let addr = self.reg(s).wrapping_add(i);
+    let v = self.reg(t);
+    self.store8(addr, v as u8);
+  }
 }
 
 #[derive(Debug, Clone, Copy)]

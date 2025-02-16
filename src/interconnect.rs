@@ -61,6 +61,33 @@ impl Interconnect {
     }
     panic!("unhandled store32 at address {:08X}", addr)
   }
+
+  pub fn store16(&mut self, addr: u32, val: u16) {
+    if addr % 2 != 0 {
+      panic!("Unalignd store16 address: {:08X}", addr);
+    }
+
+    let abs_addr = mask_region(addr);
+
+    if let Some(offset) = map::SPU.contains(abs_addr) {
+      println!("Unhandled write to SPU register {:X}", offset);
+      return;
+    }
+
+    panic!("Unhandled store16 at address {:08X}", addr)
+  }
+
+
+  pub fn store8(&mut self, addr: u32, _: u8) {
+    let abs_addr = mask_region(addr);
+
+    if let Some(offset) = map::EXPANTION_2.contains(abs_addr) {
+      println!("Unhandled write to EXPANTION_2 register {:X}", offset);
+      return;
+    }
+
+    panic!("Unhandled store8 at address {:08X}", addr)
+  }
 }
 
 mod map {
@@ -83,6 +110,8 @@ mod map {
   pub const MEM_CONTROL: Range = Range(0x1F80_1000, 36); // SYS_CONTROL
   pub const RAM_SIZE: Range = Range(0x1F80_1060, 4);
   pub const CACHE_CONTROL: Range = Range(0xFFFE_0130, 4);
+  pub const SPU: Range = Range(0x1F80_1C00, 640);
+  pub const EXPANTION_2: Range = Range(0x1F80_2000, 66);
 }
 
 const REGION_MASK: [u32; 8] = [
