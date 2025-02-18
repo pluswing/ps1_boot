@@ -58,17 +58,23 @@ impl Cpu {
     self.inter.store8(addr, val)
   }
 
+  fn load8(&self, addr: u32) -> u8 {
+    self.inter.load8(addr)
+  }
+
   fn decode_and_execute(&mut self, instruction: Instruction) {
     match instruction.function() {
       0b000000 => match instruction.subfunction() {
         0b000000 => self.op_sll(instruction),
         0b100101 => self.op_or(instruction),
+        0b001000 => self.op_jr(instruction),
         0b001011 => self.op_sltu(instruction),
         0b100001 => self.op_addu(instruction),
         _ => panic!("Unhandled instrcuntion {:08X} (sub: 0b{:06b})", instruction.0, instruction.subfunction()),
       },
       0b000010 => self.op_j(instruction),
       0b000011 => self.op_jal(instruction),
+      0b000100 => self.op_beq(instruction),
       0b000101 => self.op_bne(instruction),
       0b001000 => self.op_addi(instruction),
       0b001001 => self.op_addiu(instruction),
@@ -76,7 +82,9 @@ impl Cpu {
       0b001101 => self.op_ori(instruction),
       0b001111 => self.op_lui(instruction),
       0b010000 => self.op_cop0(instruction),
+      0b100000 => self.op_lb(instruction),
       0b100011 => self.op_lw(instruction),
+      0b101000 => self.op_sb(instruction),
       0b101011 => self.op_sw(instruction),
       0b101001 => self.op_sh(instruction),
       _ => panic!("Unhandled instruction {:08X} (f: 0b{:06b})", instruction.0, instruction.function()),
@@ -273,9 +281,7 @@ impl Cpu {
     self.set_reg(t, v);
   }
 
-
   fn op_sb(&mut self, instruction: Instruction) {
-
     if self.sr & 0x1_0000 != 0 {
       println!("Ignoring store while cache is isolated");
       return;
@@ -288,6 +294,31 @@ impl Cpu {
     let addr = self.reg(s).wrapping_add(i);
     let v = self.reg(t);
     self.store8(addr, v as u8);
+  }
+
+  fn op_jr(&mut self, instruction: Instruction) {
+    let s = instruction.s();
+    self.pc = self.reg(s);
+  }
+
+  fn op_lb(&mut self, instruction: Instruction) {
+    let i = instruction.imm_se();
+    let t = instruction.t();
+    let s = instruction.s();
+
+    let addr = self.reg(s).wrapping_add(i);
+    let v = self.load8(addr) as i8;
+    self.load = (t, v as u32);
+  }
+
+  fn op_beq(&mut self, instruction: Instruction) {
+    let i = instruction.imm_se();
+    let s = instruction.s();
+    let t = instruction.t();
+
+    if self.reg(s) == self.reg(t) {
+      self.branch(i);
+    }
   }
 }
 

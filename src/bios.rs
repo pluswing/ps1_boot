@@ -28,4 +28,8 @@ impl Bios {
 
     b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
   }
+
+  pub fn load8(&self, offset: u32) -> u8 {
+    self.data[offset as usize]
+  }
 }

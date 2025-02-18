@@ -88,6 +88,16 @@ impl Interconnect {
 
     panic!("Unhandled store8 at address {:08X}", addr)
   }
+
+  pub fn load8(&self, addr: u32) -> u8 {
+    let abs_addr = mask_region(addr);
+
+    if let Some(offset) = map::BIOS.contains(abs_addr) {
+      return self.bios.load8(offset);
+    }
+
+    panic!("Unhandled load8 at address {:08X}", addr);
+  }
 }
 
 mod map {
