@@ -32,4 +32,12 @@ impl Ram {
     self.data[offset + 2] = b2;
     self.data[offset + 3] = b3;
   }
+
+  pub fn load8(&self, offset: u32) -> u8 {
+    self.data[offset as usize]
+  }
+
+  pub fn store8(&mut self, offset: u32, val: u8) {
+    self.data[offset as usize] = val
+  }
 }

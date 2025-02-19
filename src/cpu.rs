@@ -69,6 +69,8 @@ impl Cpu {
         0b100101 => self.op_or(instruction),
         0b001000 => self.op_jr(instruction),
         0b001011 => self.op_sltu(instruction),
+        0b100000 => self.op_add(instruction),
+        0b100100 => self.op_and(instruction),
         0b100001 => self.op_addu(instruction),
         _ => panic!("Unhandled instrcuntion {:08X} (sub: 0b{:06b})", instruction.0, instruction.subfunction()),
       },
@@ -160,6 +162,7 @@ impl Cpu {
   fn op_cop0(&mut self, instruction: Instruction) {
     match instruction.cop_opcode() {
       0b00100 => self.op_mtc0(instruction),
+      0b00000 => self.op_mfc0(instruction),
       _ => panic!("Unhandled cop0 instruction {:08X} (op: 0b{:06b})", instruction.0, instruction.cop_opcode()),
     }
   }
@@ -319,6 +322,46 @@ impl Cpu {
     if self.reg(s) == self.reg(t) {
       self.branch(i);
     }
+  }
+
+  fn op_mfc0(&mut self, instruction: Instruction) {
+    let cpu_r = instruction.t();
+    let cop_r = instruction.d().0;
+
+    let v = match cop_r {
+      12 => self.sr,
+      13 => {
+        // Cause Register
+        panic!("Unhandled read from CAUSE register")
+      }
+      _ => panic!("Unhandled read from cop0r{}", cop_r)
+    };
+    self.load = (cpu_r, v)
+  }
+
+  fn op_and(&mut self, instruction: Instruction) {
+    let d = instruction.d();
+    let s = instruction.s();
+    let t = instruction.t();
+
+    let v = self.reg(s) & self.reg(t);
+    self.set_reg(d, v);
+  }
+
+
+  fn op_add(&mut self, instruction: Instruction) {
+    let s = instruction.s();
+    let t = instruction.t();
+    let d = instruction.d();
+
+    let s = self.reg(s) as i32;
+    let t = self.reg(t) as i32;
+
+    let v = match s.checked_add(t) {
+      Some(v) => v as u32,
+      None => panic!("ADD overflow"),
+    };
+    self.set_reg(d, v);
   }
 }
 

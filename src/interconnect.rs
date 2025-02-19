@@ -86,6 +86,11 @@ impl Interconnect {
       return;
     }
 
+    if let Some(offset) = map::RAM.contains(abs_addr) {
+      self.ram.store8(offset, val);
+      return;
+    }
+
     panic!("Unhandled store8 at address {:08X}", addr)
   }
 
@@ -94,6 +99,14 @@ impl Interconnect {
 
     if let Some(offset) = map::BIOS.contains(abs_addr) {
       return self.bios.load8(offset);
+    }
+
+    if let Some(offset) = map::RAM.contains(abs_addr) {
+      return self.ram.load8(offset);
+    }
+
+    if let Some(offset) = map::EXPANTION_1.contains(abs_addr) {
+      return 0xFF; // No expantion implemented
     }
 
     panic!("Unhandled load8 at address {:08X}", addr);
@@ -122,6 +135,7 @@ mod map {
   pub const CACHE_CONTROL: Range = Range(0xFFFE_0130, 4);
   pub const SPU: Range = Range(0x1F80_1C00, 640);
   pub const EXPANTION_2: Range = Range(0x1F80_2000, 66);
+  pub const EXPANTION_1: Range = Range(0x1F80_2000, 66); // FIXME 番地とサイズが適当です。
 }
 
 const REGION_MASK: [u32; 8] = [
