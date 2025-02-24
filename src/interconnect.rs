@@ -59,6 +59,10 @@ impl Interconnect {
       self.ram.store32(offset, val);
       return;
     }
+    if let Some(offset) = map::IRQ_CONTROL.contains(addr) {
+      println!("IRQ control: {:X} <- {:08X}", offset, val);
+      return;
+    }
     panic!("unhandled store32 at address {:08X}", addr)
   }
 
@@ -136,6 +140,7 @@ mod map {
   pub const SPU: Range = Range(0x1F80_1C00, 640);
   pub const EXPANTION_2: Range = Range(0x1F80_2000, 66);
   pub const EXPANTION_1: Range = Range(0x1F80_2000, 66); // FIXME 番地とサイズが適当です。
+  pub const IRQ_CONTROL: Range = Range(0x1F80_1070, 8);
 }
 
 const REGION_MASK: [u32; 8] = [
