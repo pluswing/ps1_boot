@@ -348,7 +348,6 @@ impl Cpu {
     self.set_reg(d, v);
   }
 
-
   fn op_add(&mut self, instruction: Instruction) {
     let s = instruction.s();
     let t = instruction.t();
@@ -363,6 +362,72 @@ impl Cpu {
     };
     self.set_reg(d, v);
   }
+
+  fn op_bgtz(&mut self, instruction: Instruction) {
+    let i = instruction.imm_se();
+    let s = instruction.s();
+
+    let v = self.reg(s) as i32;
+    if v > 0 {
+      self.branch(i);
+    }
+  }
+
+  fn op_blez(&mut self, instruction: Instruction) {
+    let i = instruction.imm_se();
+    let s = instruction.s();
+
+    let v = self.reg(s) as i32;
+    if v <= 0 {
+      self.branch(i);
+    }
+  }
+
+
+  fn op_lbu(&mut self, instruction: Instruction) {
+    let i = instruction.imm_se();
+    let t = instruction.t();
+    let s = instruction.s();
+
+    let addr = self.reg(s).wrapping_add(i);
+    let v = self.load8(addr);
+    self.load = (t, v as u32);
+  }
+
+  fn op_jalr(&mut self, instruction: Instruction) {
+    let d = instruction.d();
+    let s = instruction.s();
+    let ra = self.pc;
+    self.set_reg(d, ra);
+    self.pc = self.reg(s);
+  }
+
+  // BGEZ, BLTZ, BGEZAL, BLTZAL
+  fn op_bxx(&mut self, instruction: Instruction) {
+    let i = instruction.imm_se();
+    let s = instruction.s();
+
+    let instruction = instruction.0;
+
+    let is_bgez = (instruction >> 16) & 0x01;
+    let is_link = (instruction>> 17) & 0x0F == 0x08;
+
+    let v = self.reg(s) as i32;
+
+    let test = (v < 0) as u32;
+
+    let test = test ^ is_bgez;
+
+    if is_link {
+      let ra = self.pc;
+      self.set_reg(RegisterIndex(31), ra);
+    }
+
+    if test != 0 {
+      self.branch(i);
+    }
+  }
+
 }
 
 #[derive(Debug, Clone, Copy)]
