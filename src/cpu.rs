@@ -11,6 +11,9 @@ pub struct Cpu {
   sr: u32,
 
   load: (RegisterIndex, u32),
+
+  hi: u32,
+  lo: u32,
 }
 
 impl Cpu {
@@ -25,6 +28,8 @@ impl Cpu {
       next_instruction: Instruction(0), // NOP
       sr: 0,
       load: (RegisterIndex(0), 0),
+      hi: 0xDEAD_BEEF,
+      lo: 0xDEAD_BEEF,
     }
   }
 
@@ -66,26 +71,35 @@ impl Cpu {
     match instruction.function() {
       0b000000 => match instruction.subfunction() {
         0b000000 => self.op_sll(instruction),
+        0b000011 => self.op_sra(instruction),
         0b100101 => self.op_or(instruction),
         0b001000 => self.op_jr(instruction),
+        0b001001 => self.op_jalr(instruction),
         0b001011 => self.op_sltu(instruction),
+        0b011010 => self.op_div(instruction),
         0b100000 => self.op_add(instruction),
         0b100100 => self.op_and(instruction),
         0b100001 => self.op_addu(instruction),
+        0b100011 => self.op_subu(instruction),
         _ => panic!("Unhandled instrcuntion {:08X} (sub: 0b{:06b})", instruction.0, instruction.subfunction()),
       },
+      0b000001 => self.op_bxx(instruction),
       0b000010 => self.op_j(instruction),
       0b000011 => self.op_jal(instruction),
       0b000100 => self.op_beq(instruction),
       0b000101 => self.op_bne(instruction),
+      0b000110 => self.op_blez(instruction),
+      0b000111 => self.op_bgtz(instruction),
       0b001000 => self.op_addi(instruction),
       0b001001 => self.op_addiu(instruction),
+      0b001010 => self.op_slti(instruction),
       0x001100 => self.op_andi(instruction),
       0b001101 => self.op_ori(instruction),
       0b001111 => self.op_lui(instruction),
       0b010000 => self.op_cop0(instruction),
       0b100000 => self.op_lb(instruction),
       0b100011 => self.op_lw(instruction),
+      0b100100 => self.op_lbu(instruction),
       0b101000 => self.op_sb(instruction),
       0b101011 => self.op_sw(instruction),
       0b101001 => self.op_sh(instruction),
@@ -402,7 +416,7 @@ impl Cpu {
     self.pc = self.reg(s);
   }
 
-  // BGEZ, BLTZ, BGEZAL, BLTZAL
+  // BGEZ, BLTZ, BGEZAL, BLTZAL => BcondZ
   fn op_bxx(&mut self, instruction: Instruction) {
     let i = instruction.imm_se();
     let s = instruction.s();
@@ -428,6 +442,55 @@ impl Cpu {
     }
   }
 
+  fn op_slti(&mut self, instruction: Instruction) {
+    let i = instruction.imm_se() as i32;
+    let s = instruction.s();
+    let t = instruction.t();
+
+    let v = (self.reg(s) as i32) < i;
+    self.set_reg(t, v as u32);
+  }
+
+  fn op_subu(&mut self, instruction: Instruction) {
+    let s = instruction.s();
+    let t = instruction.t();
+    let d = instruction.d();
+
+    let v = self.reg(s).wrapping_sub(self.reg(t));
+    self.set_reg(d, v);
+  }
+
+  fn op_sra(&mut self, instruction: Instruction) {
+    let i = instruction.shift();
+    let t = instruction.t();
+    let d = instruction.d();
+
+    let v = (self.reg(t) as i32) >> i;
+    self.set_reg(d, v as u32);
+  }
+
+  fn op_div(&mut self, instruction: Instruction) {
+    let s = instruction.s();
+    let t = instruction.t();
+
+    let n = self.reg(s) as i32;
+    let d = self.reg(t) as i32;
+
+    if d == 0 {
+      self.hi = n as u32;
+      self.lo = if n >= 0 {
+        0xFFFF_FFFF
+      } else {
+        0x0000_0001
+      };
+    } else if n as u32 == 0x8000_0000 && d == -1 {
+      self.hi = 0;
+      self.lo = 0x8000_0000;
+    } else {
+      self.hi = (n % d) as u32;
+      self.lo = (n / d) as u32;
+    }
+  }
 }
 
 #[derive(Debug, Clone, Copy)]
