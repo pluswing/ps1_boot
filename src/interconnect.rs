@@ -82,7 +82,7 @@ impl Interconnect {
   }
 
 
-  pub fn store8(&mut self, addr: u32, _: u8) {
+  pub fn store8(&mut self, addr: u32, val: u8) {
     let abs_addr = mask_region(addr);
 
     if let Some(offset) = map::EXPANTION_2.contains(abs_addr) {

@@ -71,16 +71,21 @@ impl Cpu {
     match instruction.function() {
       0b000000 => match instruction.subfunction() {
         0b000000 => self.op_sll(instruction),
+        0b000010 => self.op_srl(instruction),
         0b000011 => self.op_sra(instruction),
         0b100101 => self.op_or(instruction),
         0b001000 => self.op_jr(instruction),
         0b001001 => self.op_jalr(instruction),
-        0b001011 => self.op_sltu(instruction),
+        0b010000 => self.op_mfhi(instruction),
+        0b010010 => self.op_mflo(instruction),
         0b011010 => self.op_div(instruction),
+        0b011011 => self.op_divu(instruction),
         0b100000 => self.op_add(instruction),
         0b100100 => self.op_and(instruction),
         0b100001 => self.op_addu(instruction),
         0b100011 => self.op_subu(instruction),
+        0b101010 => self.op_slt(instruction),
+        0b101011 => self.op_sltu(instruction),
         _ => panic!("Unhandled instrcuntion {:08X} (sub: 0b{:06b})", instruction.0, instruction.subfunction()),
       },
       0b000001 => self.op_bxx(instruction),
@@ -93,7 +98,8 @@ impl Cpu {
       0b001000 => self.op_addi(instruction),
       0b001001 => self.op_addiu(instruction),
       0b001010 => self.op_slti(instruction),
-      0x001100 => self.op_andi(instruction),
+      0b001011 => self.op_sltiu(instruction),
+      0b001100 => self.op_andi(instruction),
       0b001101 => self.op_ori(instruction),
       0b001111 => self.op_lui(instruction),
       0b010000 => self.op_cop0(instruction),
@@ -491,6 +497,66 @@ impl Cpu {
       self.lo = (n / d) as u32;
     }
   }
+
+  fn op_mflo(&mut self, instruction: Instruction) {
+    let d = instruction.d();
+    let lo = self.lo;
+    self.set_reg(d, lo);
+  }
+
+  fn op_srl(&mut self, instruction: Instruction) {
+    let i = instruction.shift();
+    let t = instruction.t();
+    let d = instruction.d();
+
+    let v = self.reg(t) >> i;
+    self.set_reg(d, v);
+  }
+
+  fn op_sltiu(&mut self, instruction: Instruction) {
+    let i = instruction.imm_se();
+    let s = instruction.s();
+    let t = instruction.t();
+
+    let v = self.reg(s) < i;
+    self.set_reg(t, v as u32);
+  }
+
+
+  fn op_divu(&mut self, instruction: Instruction) {
+    let s = instruction.s();
+    let t = instruction.t();
+
+    let n = self.reg(s);
+    let d = self.reg(t);
+
+    if d == 0 {
+      self.hi = n;
+      self.lo = 0xFFFF_FFFF;
+    } else {
+      self.hi = n % d;
+      self.lo = n / d;
+    }
+  }
+
+  fn op_mfhi(&mut self, instruction: Instruction) {
+    let d = instruction.d();
+    let hi = self.hi;
+    self.set_reg(d, hi);
+  }
+
+  fn op_slt(&mut self, instruction: Instruction) {
+    let d = instruction.d();
+    let s = instruction.s();
+    let t = instruction.t();
+
+    let s = self.reg(s) as i32;
+    let t = self.reg(t) as i32;
+
+    let v = s < t;
+    self.set_reg(d, v as u32);
+  }
+
 }
 
 #[derive(Debug, Clone, Copy)]
