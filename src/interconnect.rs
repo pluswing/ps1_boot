@@ -26,6 +26,10 @@ impl Interconnect {
     if let Some(offset) = map::RAM.contains(addr) {
       return self.ram.load32(offset);
     }
+    if let Some(offset) = map::IRQ_CONTROL.contains(addr) {
+      println!("IRQ control read: {:X}", offset);
+      return 0;
+    }
     panic!("unhandled load32 at address {:08X}", addr);
   }
 
@@ -75,6 +79,11 @@ impl Interconnect {
 
     if let Some(offset) = map::SPU.contains(abs_addr) {
       println!("Unhandled write to SPU register {:X}", offset);
+      return;
+    }
+
+    if let Some(offset) = map::TIMERS.contains(abs_addr) {
+      println!("Unhandled write to timer register {:X}", offset);
       return;
     }
 
@@ -138,9 +147,10 @@ mod map {
   pub const RAM_SIZE: Range = Range(0x1F80_1060, 4);
   pub const CACHE_CONTROL: Range = Range(0xFFFE_0130, 4);
   pub const SPU: Range = Range(0x1F80_1C00, 640);
-  pub const EXPANTION_2: Range = Range(0x1F80_2000, 66);
-  pub const EXPANTION_1: Range = Range(0x1F80_2000, 66); // FIXME 番地とサイズが適当です。
+  pub const EXPANTION_2: Range = Range(0x1F80_2000, 66); // FIXME 128?
+  pub const EXPANTION_1: Range = Range(0x1F00_0000, 512 * 1024); // FIXME サイズ適当です。
   pub const IRQ_CONTROL: Range = Range(0x1F80_1070, 8);
+  pub const TIMERS: Range = Range(0x1F80_1100, 16 * 3);
 }
 
 const REGION_MASK: [u32; 8] = [

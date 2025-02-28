@@ -2,6 +2,7 @@ use crate::interconnect::Interconnect;
 
 pub struct Cpu {
   pc: u32,
+  next_pc: u32,
   regs: [u32; 32],
   out_regs: [u32; 32],
   inter: Interconnect,
@@ -9,6 +10,9 @@ pub struct Cpu {
 
   // COP0
   sr: u32,
+  current_pc: u32,
+  cause: u32,
+  epc: u32,
 
   load: (RegisterIndex, u32),
 
@@ -20,13 +24,18 @@ impl Cpu {
   pub fn new(inter: Interconnect) -> Self {
     let mut regs = [0xDEAD_BEEF; 32];
     regs[0] = 0;
+    let pc = 0xBFC0_0000;
     Self {
-      pc: 0xBFC0_0000,
+      pc,
+      next_pc: pc.wrapping_add(4),
       regs,
       out_regs: regs,
       inter,
       next_instruction: Instruction(0), // NOP
       sr: 0,
+      current_pc: 0,
+      cause: 0,
+      epc: 0,
       load: (RegisterIndex(0), 0),
       hi: 0xDEAD_BEEF,
       lo: 0xDEAD_BEEF,
@@ -34,14 +43,10 @@ impl Cpu {
   }
 
   pub fn run_next_instruction(&mut self) {
-    let pc = self.pc;
-    let instruction = self.next_instruction;
-    self.next_instruction = Instruction(self.load32(pc));
-    println!("EXEC: 0x{:08X} => 0x{:08X} (f:0b{:06b})", self.pc, instruction.0, instruction.function());
-    self.pc = pc.wrapping_add(4);
-
-    let (reg, val) = self.load;
-    self.set_reg(reg, val);
+    let instruction = Instruction(self.load32(self.pc));
+    self.current_pc = self.pc;
+    self.pc = self.next_pc;
+    self.next_pc = self.next_pc.wrapping_add(4);
     self.load = (RegisterIndex(0), 0);
     self.decode_and_execute(instruction);
     self.regs = self.out_regs;
@@ -354,6 +359,7 @@ impl Cpu {
         // Cause Register
         panic!("Unhandled read from CAUSE register")
       }
+      14 => self.epc,
       _ => panic!("Unhandled read from cop0r{}", cop_r)
     };
     self.load = (cpu_r, v)
