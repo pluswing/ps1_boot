@@ -147,8 +147,8 @@ mod map {
   pub const RAM_SIZE: Range = Range(0x1F80_1060, 4);
   pub const CACHE_CONTROL: Range = Range(0xFFFE_0130, 4);
   pub const SPU: Range = Range(0x1F80_1C00, 640);
-  pub const EXPANTION_2: Range = Range(0x1F80_2000, 66); // FIXME 128?
-  pub const EXPANTION_1: Range = Range(0x1F00_0000, 512 * 1024); // FIXME サイズ適当です。
+  pub const EXPANTION_2: Range = Range(0x1F80_2000, 66);
+  pub const EXPANTION_1: Range = Range(0x1F00_0000, 512 * 1024);
   pub const IRQ_CONTROL: Range = Range(0x1F80_1070, 8);
   pub const TIMERS: Range = Range(0x1F80_1100, 16 * 3);
 }

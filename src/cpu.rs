@@ -43,10 +43,14 @@ impl Cpu {
   }
 
   pub fn run_next_instruction(&mut self) {
+    // FIXME PCの取扱がなんか変な気がする。
     let instruction = Instruction(self.load32(self.pc));
     self.current_pc = self.pc;
     self.pc = self.next_pc;
     self.next_pc = self.next_pc.wrapping_add(4);
+
+    let (reg, val) = self.load;
+    self.set_reg(reg, val);
     self.load = (RegisterIndex(0), 0);
     self.decode_and_execute(instruction);
     self.regs = self.out_regs;
@@ -355,10 +359,7 @@ impl Cpu {
 
     let v = match cop_r {
       12 => self.sr,
-      13 => {
-        // Cause Register
-        panic!("Unhandled read from CAUSE register")
-      }
+      13 => self.cause,
       14 => self.epc,
       _ => panic!("Unhandled read from cop0r{}", cop_r)
     };
@@ -563,6 +564,27 @@ impl Cpu {
     self.set_reg(d, v as u32);
   }
 
+  fn exception(&mut self, cause: Exception) {
+    let handler = match self.sr & (1 << 22) != 0 {
+      true => 0xBFC0_0180,
+      false => 0x8000_0080,
+    };
+
+    let mode = self.sr & 0x3F;
+    self.sr = self.sr & (!0x3F);
+    self.sr = self.sr | ((mode << 2) & 0x3F);
+
+    self.cause = (cause as u32) << 2;
+
+    self.epc = self.current_pc;
+
+    self.pc = handler;
+    self.next_pc = self.pc.wrapping_add(4);
+  }
+
+  fn op_syscall(&mut self, _: Instruction) {
+    self.exception(Exception::SysCall);
+  }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -623,4 +645,8 @@ impl Instruction {
     (op >> 21) & 0x1F
   }
 
+}
+
+enum Exception {
+  SysCall = 0x08,
 }
