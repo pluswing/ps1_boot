@@ -87,6 +87,9 @@ impl Cpu {
         0b001001 => self.op_jalr(instruction),
         0b010000 => self.op_mfhi(instruction),
         0b010010 => self.op_mflo(instruction),
+        0x11 => self.op_mthi(instruction),
+        0x13 => self.op_mtlo(instruction),
+        0x0C => self.op_syscall(instruction),
         0b011010 => self.op_div(instruction),
         0b011011 => self.op_divu(instruction),
         0b100000 => self.op_add(instruction),
@@ -192,6 +195,7 @@ impl Cpu {
     match instruction.cop_opcode() {
       0b00100 => self.op_mtc0(instruction),
       0b00000 => self.op_mfc0(instruction),
+      0b10000 => self.op_rfe(instruction),
       _ => panic!("Unhandled cop0 instruction {:08X} (op: 0b{:06b})", instruction.0, instruction.cop_opcode()),
     }
   }
@@ -584,6 +588,26 @@ impl Cpu {
 
   fn op_syscall(&mut self, _: Instruction) {
     self.exception(Exception::SysCall);
+  }
+
+  fn op_mtlo(&mut self, instruction: Instruction) {
+    let s = instruction.s();
+    self.lo = self.reg(s);
+  }
+
+  fn op_mthi(&mut self, instruction: Instruction) {
+    let s = instruction.s();
+    self.hi = self.reg(s);
+  }
+
+  fn op_rfe(&mut self, instruction: Instruction) {
+    if instruction.0 & 0x3F != 0b010000 {
+      panic!("Invalid cop0 instruction: {:?}", instruction);
+    }
+
+    let mode = self.sr & 0x3F;
+    self.sr = self.sr & !0x3F;
+    self.sr = self.sr | mode >> 2;
   }
 }
 
