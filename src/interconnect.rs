@@ -83,12 +83,14 @@ impl Interconnect {
     }
     let abs_addr = mask_region(addr);
 
-    // if let Some(offset) = map::BIOS.contains(abs_addr) {
-    //   return self.bios.load16(offset);
-    // }
-    // if let Some(offset) = map::RAM.contains(abs_addr) {
-    //   return self.ram.load16(offset);
-    // }
+    if let Some(_) = map::SPU.contains(abs_addr) {
+      println!("Unhandled read from SPU register {:08X}", abs_addr);
+      return 0;
+    }
+    if let Some(offset) = map::RAM.contains(abs_addr) {
+      return self.ram.load16(offset);
+    }
+
     panic!("unhandled load16 at address {:08X}", addr);
   }
 

@@ -94,49 +94,52 @@ impl Cpu {
   fn decode_and_execute(&mut self, instruction: Instruction) {
     match instruction.function() {
       0b000000 => match instruction.subfunction() {
-        0b000000 => self.op_sll(instruction),
-        0b000010 => self.op_srl(instruction),
-        0b000011 => self.op_sra(instruction),
-        0b100101 => self.op_or(instruction),
-        0b001000 => self.op_jr(instruction),
-        0b001001 => self.op_jalr(instruction),
-        0b010000 => self.op_mfhi(instruction),
-        0b010010 => self.op_mflo(instruction),
+        0x00 => self.op_sll(instruction),
+        0x02 => self.op_srl(instruction),
+        0x03 => self.op_sra(instruction),
+        0x04 => self.op_sllv(instruction),
+        0x08 => self.op_jr(instruction),
+        0x09 => self.op_jalr(instruction),
+        0x0C => self.op_syscall(instruction),
+        0x10 => self.op_mfhi(instruction),
         0x11 => self.op_mthi(instruction),
         0x13 => self.op_mtlo(instruction),
-        0x0C => self.op_syscall(instruction),
-        0b011010 => self.op_div(instruction),
-        0b011011 => self.op_divu(instruction),
-        0b100000 => self.op_add(instruction),
-        0b100100 => self.op_and(instruction),
-        0b100001 => self.op_addu(instruction),
-        0b100011 => self.op_subu(instruction),
-        0b101010 => self.op_slt(instruction),
-        0b101011 => self.op_sltu(instruction),
+        0x18 => self.op_mflo(instruction),
+        0x1A => self.op_div(instruction),
+        0x1B => self.op_divu(instruction),
+        0x20 => self.op_add(instruction),
+        0x21 => self.op_addu(instruction),
+        0x23 => self.op_subu(instruction),
+        0x24 => self.op_and(instruction),
+        0x25 => self.op_or(instruction),
+        0x27 => self.op_nor(instruction),
+        0x2A => self.op_slt(instruction),
+        0x2B => self.op_sltu(instruction),
         _ => panic!("Unhandled instrcuntion {:08X} (sub: 0b{:06b})", instruction.0, instruction.subfunction()),
       },
-      0b000001 => self.op_bxx(instruction),
-      0b000010 => self.op_j(instruction),
-      0b000011 => self.op_jal(instruction),
-      0b000100 => self.op_beq(instruction),
-      0b000101 => self.op_bne(instruction),
-      0b000110 => self.op_blez(instruction),
-      0b000111 => self.op_bgtz(instruction),
-      0b001000 => self.op_addi(instruction),
-      0b001001 => self.op_addiu(instruction),
-      0b001010 => self.op_slti(instruction),
-      0b001011 => self.op_sltiu(instruction),
-      0b001100 => self.op_andi(instruction),
-      0b001101 => self.op_ori(instruction),
-      0b001111 => self.op_lui(instruction),
-      0b010000 => self.op_cop0(instruction),
-      0b100000 => self.op_lb(instruction),
-      0b100011 => self.op_lw(instruction),
-      0b100100 => self.op_lbu(instruction),
-      0b101000 => self.op_sb(instruction),
-      0b101011 => self.op_sw(instruction),
-      0b101001 => self.op_sh(instruction),
+      0x01 => self.op_bxx(instruction),
+      0x02 => self.op_j(instruction),
+      0x03 => self.op_jal(instruction),
+      0x04 => self.op_beq(instruction),
+      0x05 => self.op_bne(instruction),
+      0x06 => self.op_blez(instruction),
+      0x07 => self.op_bgtz(instruction),
+      0x08 => self.op_addi(instruction),
+      0x09 => self.op_addiu(instruction),
+      0x0A => self.op_slti(instruction),
+      0x0B => self.op_sltiu(instruction),
+      0x0C => self.op_andi(instruction),
+      0x0D => self.op_ori(instruction),
+      0x0F => self.op_lui(instruction),
+      0x10 => self.op_cop0(instruction),
+      0x20 => self.op_lb(instruction),
+      0x21 => self.op_lh(instruction),
+      0x23 => self.op_lw(instruction),
+      0x24 => self.op_lbu(instruction),
       0x25 => self.op_lhu(instruction),
+      0x28 => self.op_sb(instruction),
+      0x29 => self.op_sh(instruction),
+      0x2B => self.op_sw(instruction),
       _ => panic!("Unhandled instruction {:08X} (f: 0b{:06b})", instruction.0, instruction.function()),
     }
   }
@@ -653,6 +656,33 @@ impl Cpu {
     } else {
       self.exception(Exception::LoadAddressError);
     }
+  }
+
+  fn op_sllv(&mut self, instruction: Instruction) {
+    let d = instruction.d();
+    let s = instruction.s();
+    let t = instruction.t();
+
+    let v = self.reg(t) << (self.reg(s) & 0x1F);
+    self.set_reg(d, v);
+  }
+
+  fn op_lh(&mut self, instruction: Instruction) {
+    let i = instruction.imm_se();
+    let t = instruction.t();
+    let s = instruction.s();
+
+    let addr = self.reg(s).wrapping_add(i);
+    let v = self.load16(addr) as i16;
+    self.load = (t, v as u32);
+  }
+
+  fn op_nor(&mut self, instruction: Instruction) {
+    let d = instruction.d();
+    let s = instruction.s();
+    let t = instruction.t();
+    let v = !(self.reg(s) | self.reg(t));
+    self.set_reg(d, v);
   }
 }
 
