@@ -18,17 +18,20 @@ impl Interconnect {
     if addr % 4 != 0 {
       panic!("Unalignd load32 address: {:08X}", addr);
     }
-    let addr = mask_region(addr);
+    let abs_addr = mask_region(addr);
 
-    if let Some(offset) = map::BIOS.contains(addr) {
+    if let Some(offset) = map::BIOS.contains(abs_addr) {
       return self.bios.load32(offset);
     }
-    if let Some(offset) = map::RAM.contains(addr) {
+    if let Some(offset) = map::RAM.contains(abs_addr) {
       return self.ram.load32(offset);
     }
-    if let Some(offset) = map::IRQ_CONTROL.contains(addr) {
+    if let Some(offset) = map::IRQ_CONTROL.contains(abs_addr) {
       println!("IRQ control read: {:X}", offset);
       return 0;
+    }
+    if let Some(offset) = map::DMA.contains(abs_addr) {
+      println!("DMA read: {:08X}", abs_addr);
     }
     panic!("unhandled load32 at address {:08X}", addr);
   }
@@ -37,9 +40,9 @@ impl Interconnect {
     if addr % 4 != 0 {
       panic!("Unalignd store32 address: {:08X}", addr);
     }
-    let addr = mask_region(addr);
+    let abs_addr = mask_region(addr);
 
-    if let Some(offset) = map::MEM_CONTROL.contains(addr) {
+    if let Some(offset) = map::MEM_CONTROL.contains(abs_addr) {
       match offset {
         0 => if val != 0x1F00_0000 {
           panic!("Bad expansion 1 base address: 0x{:01X}", val);
@@ -51,23 +54,42 @@ impl Interconnect {
       }
       return;
     }
-    if let Some(_) = map::RAM_SIZE.contains(addr) {
-      println!("write to RAM_SIZE register {:08X}", addr);
+    if let Some(_) = map::RAM_SIZE.contains(abs_addr) {
+      println!("write to RAM_SIZE register {:08X}", abs_addr);
       return;
     }
-    if let Some(_) = map::CACHE_CONTROL.contains(addr) {
-      println!("write to CACHE_CONTROL register {:08X}", addr);
+    if let Some(_) = map::CACHE_CONTROL.contains(abs_addr) {
+      println!("write to CACHE_CONTROL register {:08X}", abs_addr);
       return;
     }
-    if let Some(offset) = map::RAM.contains(addr) {
+    if let Some(offset) = map::RAM.contains(abs_addr) {
       self.ram.store32(offset, val);
       return;
     }
-    if let Some(offset) = map::IRQ_CONTROL.contains(addr) {
+    if let Some(offset) = map::IRQ_CONTROL.contains(abs_addr) {
       println!("IRQ control: {:X} <- {:08X}", offset, val);
       return;
     }
+    if let Some(_) = map::DMA.contains(abs_addr) {
+      println!("DMA write: {:08X} {:08X}", abs_addr, val);
+      return;
+    }
     panic!("unhandled store32 at address {:08X}", addr)
+  }
+
+  pub fn load16(&self, addr: u32) -> u16 {
+    if addr % 2 != 0 {
+      panic!("Unalignd load16 address: {:08X}", addr);
+    }
+    let abs_addr = mask_region(addr);
+
+    // if let Some(offset) = map::BIOS.contains(abs_addr) {
+    //   return self.bios.load16(offset);
+    // }
+    // if let Some(offset) = map::RAM.contains(abs_addr) {
+    //   return self.ram.load16(offset);
+    // }
+    panic!("unhandled load16 at address {:08X}", addr);
   }
 
   pub fn store16(&mut self, addr: u32, val: u16) {
@@ -76,6 +98,10 @@ impl Interconnect {
     }
 
     let abs_addr = mask_region(addr);
+
+    if let Some(offset) = map::RAM.contains(abs_addr) {
+      return self.ram.store16(offset, val);
+    }
 
     if let Some(offset) = map::SPU.contains(abs_addr) {
       println!("Unhandled write to SPU register {:X}", offset);
@@ -151,6 +177,7 @@ mod map {
   pub const EXPANTION_1: Range = Range(0x1F00_0000, 512 * 1024);
   pub const IRQ_CONTROL: Range = Range(0x1F80_1070, 8);
   pub const TIMERS: Range = Range(0x1F80_1100, 16 * 3);
+  pub const DMA: Range = Range(0x1F80_1080, 0x80);
 }
 
 const REGION_MASK: [u32; 8] = [

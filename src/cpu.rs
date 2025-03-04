@@ -75,6 +75,10 @@ impl Cpu {
     self.inter.store32(addr, val)
   }
 
+  fn load16(&self, addr: u32) -> u16 {
+    self.inter.load16(addr)
+  }
+
   fn store16(&mut self, addr: u32, val: u16) {
     self.inter.store16(addr, val)
   }
@@ -132,6 +136,7 @@ impl Cpu {
       0b101000 => self.op_sb(instruction),
       0b101011 => self.op_sw(instruction),
       0b101001 => self.op_sh(instruction),
+      0x25 => self.op_lhu(instruction),
       _ => panic!("Unhandled instruction {:08X} (f: 0b{:06b})", instruction.0, instruction.function()),
     }
   }
@@ -634,6 +639,20 @@ impl Cpu {
     let mode = self.sr & 0x3F;
     self.sr = self.sr & !0x3F;
     self.sr = self.sr | mode >> 2;
+  }
+
+  fn op_lhu(&mut self, instruction: Instruction) {
+    let i = instruction.imm_se();
+    let t = instruction.t();
+    let s = instruction.s();
+
+    let addr = self.reg(s).wrapping_add(i);
+    if addr & 2 == 0 {
+      let v = self.load16(addr);
+      self.load = (t, v as u32);
+    } else {
+      self.exception(Exception::LoadAddressError);
+    }
   }
 }
 
