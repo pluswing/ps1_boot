@@ -18,6 +18,9 @@ pub struct Cpu {
 
   hi: u32,
   lo: u32,
+
+  branch: bool,
+  delay_slot: bool,
 }
 
 impl Cpu {
@@ -39,19 +42,27 @@ impl Cpu {
       load: (RegisterIndex(0), 0),
       hi: 0xDEAD_BEEF,
       lo: 0xDEAD_BEEF,
+      branch: false,
+      delay_slot: false,
     }
   }
 
   pub fn run_next_instruction(&mut self) {
     // FIXME PCの取扱がなんか変な気がする。
-    let instruction = Instruction(self.load32(self.pc));
     self.current_pc = self.pc;
+    if self.current_pc % 4 != 0 {
+      self.exception(Exception::LoadAddressError);
+      return;
+    }
+    let instruction = Instruction(self.load32(self.pc));
     self.pc = self.next_pc;
     self.next_pc = self.next_pc.wrapping_add(4);
 
     let (reg, val) = self.load;
     self.set_reg(reg, val);
     self.load = (RegisterIndex(0), 0);
+    self.delay_slot = self.branch;
+    self.branch = false;
     self.decode_and_execute(instruction);
     self.regs = self.out_regs;
   }
@@ -155,8 +166,12 @@ impl Cpu {
     let s = instruction.s();
 
     let addr = self.reg(s).wrapping_add(i);
-    let v = self.reg(t);
-    self.store32(addr, v);
+    if addr % 4 == 0 {
+      let v = self.reg(t);
+      self.store32(addr, v);
+    } else {
+      self.exception(Exception::StoreAddressError);
+    }
   }
 
   fn op_sll(&mut self, instruction: Instruction) {
@@ -230,6 +245,7 @@ impl Cpu {
     pc = pc.wrapping_add(offset);
     pc = pc.wrapping_sub(4);
     self.pc = pc;
+    self.branch = true;
   }
 
   fn op_bne(&mut self, instruction: Instruction) {
@@ -248,11 +264,10 @@ impl Cpu {
     let s = instruction.s();
 
     let s = self.reg(s) as i32;
-    let v = match s.checked_add(i) {
-      Some(v) => v as u32,
-      None => panic!("ADDI overflow"),
-    };
-    self.set_reg(t, v);
+    match s.checked_add(i) {
+      Some(v) => self.set_reg(t, v as u32),
+      None => self.exception(Exception::Overflow),
+    }
   }
 
   fn op_lw(&mut self, instruction: Instruction) {
@@ -265,8 +280,12 @@ impl Cpu {
     let s = instruction.s();
 
     let addr = self.reg(s).wrapping_add(i);
-    let v = self.load32(addr);
-    self.load = (t, v);
+    if addr % 4 == 0 {
+      let v = self.load32(addr);
+      self.load = (t, v);
+    } else {
+      self.exception(Exception::LoadAddressError);
+    }
   }
 
   fn op_sltu(&mut self, instruction: Instruction) {
@@ -299,8 +318,12 @@ impl Cpu {
     let s = instruction.s();
 
     let addr = self.reg(s).wrapping_add(i);
-    let v = self.reg(t);
-    self.store16(addr, v as u16);
+    if addr % 2 == 0 {
+      let v = self.reg(t);
+      self.store16(addr, v as u16);
+    } else {
+      self.exception(Exception::StoreAddressError);
+    }
   }
 
   fn op_jal(&mut self, instruction: Instruction) {
@@ -387,11 +410,10 @@ impl Cpu {
     let s = self.reg(s) as i32;
     let t = self.reg(t) as i32;
 
-    let v = match s.checked_add(t) {
-      Some(v) => v as u32,
-      None => panic!("ADD overflow"),
-    };
-    self.set_reg(d, v);
+    match s.checked_add(t) {
+      Some(v) => self.set_reg(d, v as u32),
+      None => self.exception(Exception::Overflow),
+    }
   }
 
   fn op_bgtz(&mut self, instruction: Instruction) {
@@ -579,8 +601,12 @@ impl Cpu {
     self.sr = self.sr | ((mode << 2) & 0x3F);
 
     self.cause = (cause as u32) << 2;
-
     self.epc = self.current_pc;
+
+    if self.delay_slot {
+      self.epc = self.epc.wrapping_sub(4);
+      self.cause = self.cause | (1 << 31);
+    }
 
     self.pc = handler;
     self.next_pc = self.pc.wrapping_add(4);
@@ -673,4 +699,7 @@ impl Instruction {
 
 enum Exception {
   SysCall = 0x08,
+  Overflow = 0x0C,
+  LoadAddressError = 0x04,
+  StoreAddressError = 0x05,
 }
