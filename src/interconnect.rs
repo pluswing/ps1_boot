@@ -31,7 +31,12 @@ impl Interconnect {
       return 0;
     }
     if let Some(offset) = map::DMA.contains(abs_addr) {
-      println!("DMA read: {:08X}", abs_addr);
+      println!("DMA read: {:08X}", offset);
+      return 0;
+    }
+    if let Some(offset) = map::GPU.contains(abs_addr) {
+      println!("GPU read: {:08X}", offset);
+      return 0;
     }
     panic!("unhandled load32 at address {:08X}", addr);
   }

@@ -98,13 +98,16 @@ impl Cpu {
         0x02 => self.op_srl(instruction),
         0x03 => self.op_sra(instruction),
         0x04 => self.op_sllv(instruction),
+        0x06 => self.op_srlv(instruction),
+        0x07 => self.op_srav(instruction),
         0x08 => self.op_jr(instruction),
         0x09 => self.op_jalr(instruction),
         0x0C => self.op_syscall(instruction),
         0x10 => self.op_mfhi(instruction),
         0x11 => self.op_mthi(instruction),
+        0x12 => self.op_mflo(instruction),
         0x13 => self.op_mtlo(instruction),
-        0x18 => self.op_mflo(instruction),
+        0x19 => self.op_multu(instruction),
         0x1A => self.op_div(instruction),
         0x1B => self.op_divu(instruction),
         0x20 => self.op_add(instruction),
@@ -650,7 +653,7 @@ impl Cpu {
     let s = instruction.s();
 
     let addr = self.reg(s).wrapping_add(i);
-    if addr & 2 == 0 {
+    if addr % 2 == 0 {
       let v = self.load16(addr);
       self.load = (t, v as u32);
     } else {
@@ -684,6 +687,37 @@ impl Cpu {
     let v = !(self.reg(s) | self.reg(t));
     self.set_reg(d, v);
   }
+
+  fn op_srav(&mut self, instruction: Instruction) {
+    let d = instruction.d();
+    let s = instruction.s();
+    let t = instruction.t();
+
+    let v = (self.reg(t) as i32) >> (self.reg(s) & 0x1F);
+    self.set_reg(d, v as u32);
+  }
+
+  fn op_srlv(&mut self, instruction: Instruction) {
+    let d = instruction.d();
+    let s = instruction.s();
+    let t = instruction.t();
+
+    let v = self.reg(t) >> (self.reg(s) & 0x1F);
+    self.set_reg(d, v);
+  }
+
+  fn op_multu(&mut self, instruction: Instruction) {
+    let s = instruction.s();
+    let t = instruction.t();
+
+    let a = self.reg(s) as u64;
+    let b = self.reg(t) as u64;
+    let v = a * b;
+
+    self.hi = (v >> 32) as u32;
+    self.lo = v as u32;
+  }
+
 }
 
 #[derive(Debug, Clone, Copy)]
