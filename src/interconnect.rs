@@ -79,6 +79,14 @@ impl Interconnect {
       println!("DMA write: {:08X} {:08X}", abs_addr, val);
       return;
     }
+    if let Some(offset) = map::GPU.contains(abs_addr) {
+      println!("GPU write: {:08X} {:08X}", offset, val);
+      return;
+    }
+    if let Some(offset) = map::TIMERS.contains(abs_addr) {
+      println!("Unhandled write to timer register {:08X} {:08X}", offset, val);
+      return;
+    }
     panic!("unhandled store32 at address {:08X}", addr)
   }
 
@@ -94,6 +102,11 @@ impl Interconnect {
     }
     if let Some(offset) = map::RAM.contains(abs_addr) {
       return self.ram.load16(offset);
+    }
+
+    if let Some(offset) = map::IRQ_CONTROL.contains(abs_addr) {
+      println!("IRQ control read {:08X}", offset);
+      return 0;
     }
 
     panic!("unhandled load16 at address {:08X}", addr);
@@ -117,6 +130,11 @@ impl Interconnect {
 
     if let Some(offset) = map::TIMERS.contains(abs_addr) {
       println!("Unhandled write to timer register {:X}", offset);
+      return;
+    }
+
+    if let Some(offset) = map::IRQ_CONTROL.contains(abs_addr) {
+      println!("IRQ control write {:08X} {:04X}", offset, val);
       return;
     }
 
@@ -185,6 +203,7 @@ mod map {
   pub const IRQ_CONTROL: Range = Range(0x1F80_1070, 8);
   pub const TIMERS: Range = Range(0x1F80_1100, 16 * 3);
   pub const DMA: Range = Range(0x1F80_1080, 0x80);
+  pub const GPU: Range = Range(0x1F80_1810, 8); // GP0, GP1
 }
 
 const REGION_MASK: [u32; 8] = [

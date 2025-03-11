@@ -48,7 +48,6 @@ impl Cpu {
   }
 
   pub fn run_next_instruction(&mut self) {
-    // FIXME PCの取扱がなんか変な気がする。
     self.current_pc = self.pc;
     if self.current_pc % 4 != 0 {
       self.exception(Exception::LoadAddressError);
@@ -205,7 +204,7 @@ impl Cpu {
 
   fn op_j(&mut self, instruction: Instruction) {
     let i = instruction.imm_jump();
-    self.pc = (self.pc & 0xF000_0000) | (i << 2);
+    self.next_pc = (self.pc & 0xF000_0000) | (i << 2);
   }
 
   fn op_or(&mut self, instruction: Instruction) {
@@ -254,8 +253,9 @@ impl Cpu {
     let offset = offset << 2;
     let mut pc = self.pc;
     pc = pc.wrapping_add(offset);
-    pc = pc.wrapping_sub(4);
-    self.pc = pc;
+    // FIXME next_pcを導入したことによりおそらく不要になっている
+    // pc = pc.wrapping_sub(4);
+    self.next_pc = pc;
     self.branch = true;
   }
 
@@ -368,7 +368,7 @@ impl Cpu {
 
   fn op_jr(&mut self, instruction: Instruction) {
     let s = instruction.s();
-    self.pc = self.reg(s);
+    self.next_pc = self.reg(s);
   }
 
   fn op_lb(&mut self, instruction: Instruction) {
@@ -463,7 +463,7 @@ impl Cpu {
     let s = instruction.s();
     let ra = self.pc;
     self.set_reg(d, ra);
-    self.pc = self.reg(s);
+    self.next_pc = self.reg(s);
   }
 
   // BGEZ, BLTZ, BGEZAL, BLTZAL => BcondZ
@@ -619,7 +619,7 @@ impl Cpu {
       self.cause = self.cause | (1 << 31);
     }
 
-    self.pc = handler;
+    self.next_pc = handler;
     self.next_pc = self.pc.wrapping_add(4);
   }
 
