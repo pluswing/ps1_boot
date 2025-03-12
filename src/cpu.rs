@@ -54,6 +54,7 @@ impl Cpu {
       return;
     }
     let instruction = Instruction(self.load32(self.pc));
+    // println!("PC: {:08X} => {:02X} ({:02X})", self.pc, instruction.function(), instruction.subfunction());
     self.pc = self.next_pc;
     self.next_pc = self.next_pc.wrapping_add(4);
 
@@ -114,6 +115,7 @@ impl Cpu {
         0x23 => self.op_subu(instruction),
         0x24 => self.op_and(instruction),
         0x25 => self.op_or(instruction),
+        0x26 => self.op_xor(instruction),
         0x27 => self.op_nor(instruction),
         0x2A => self.op_slt(instruction),
         0x2B => self.op_sltu(instruction),
@@ -619,7 +621,7 @@ impl Cpu {
       self.cause = self.cause | (1 << 31);
     }
 
-    self.next_pc = handler;
+    self.pc = handler;
     self.next_pc = self.pc.wrapping_add(4);
   }
 
@@ -716,6 +718,15 @@ impl Cpu {
 
     self.hi = (v >> 32) as u32;
     self.lo = v as u32;
+  }
+
+  fn op_xor(&mut self, instruction: Instruction) {
+    let d = instruction.d();
+    let s = instruction.s();
+    let t = instruction.t();
+
+    let v = self.reg(s) ^ self.reg(t);
+    self.set_reg(d, v);
   }
 
 }
