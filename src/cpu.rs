@@ -103,15 +103,18 @@ impl Cpu {
         0x08 => self.op_jr(instruction),
         0x09 => self.op_jalr(instruction),
         0x0C => self.op_syscall(instruction),
+        0x0D => self.op_break(instruction),
         0x10 => self.op_mfhi(instruction),
         0x11 => self.op_mthi(instruction),
         0x12 => self.op_mflo(instruction),
         0x13 => self.op_mtlo(instruction),
+        0x18 => self.op_mult(instruction),
         0x19 => self.op_multu(instruction),
         0x1A => self.op_div(instruction),
         0x1B => self.op_divu(instruction),
         0x20 => self.op_add(instruction),
         0x21 => self.op_addu(instruction),
+        0x22 => self.op_sub(instruction),
         0x23 => self.op_subu(instruction),
         0x24 => self.op_and(instruction),
         0x25 => self.op_or(instruction),
@@ -134,8 +137,12 @@ impl Cpu {
       0x0B => self.op_sltiu(instruction),
       0x0C => self.op_andi(instruction),
       0x0D => self.op_ori(instruction),
+      0x0E => self.op_xori(instruction),
       0x0F => self.op_lui(instruction),
       0x10 => self.op_cop0(instruction),
+      0x11 => self.op_cop1(instruction),
+      0x12 => self.op_cop2(instruction),
+      0x13 => self.op_cop3(instruction),
       0x20 => self.op_lb(instruction),
       0x21 => self.op_lh(instruction),
       0x23 => self.op_lw(instruction),
@@ -729,6 +736,55 @@ impl Cpu {
     self.set_reg(d, v);
   }
 
+  fn op_break(&mut self, instruction: Instruction) {
+    self.exception(Exception::Break);
+  }
+
+  fn op_mult(&mut self, instruction: Instruction) {
+    let s = instruction.s();
+    let t = instruction.t();
+
+    let a = (self.reg(s) as i32) as i64;
+    let b = (self.reg(t) as i32) as i64;
+    let v = (a * b) as u64;
+
+    self.hi = (v >> 32) as u32;
+    self.lo = v as u32;
+  }
+
+  fn op_sub(&mut self, instruction: Instruction) {
+    let s = instruction.s();
+    let t = instruction.t();
+    let d = instruction.d();
+
+    let s = self.reg(s) as i32;
+    let t = self.reg(t) as i32;
+
+    match s.checked_sub(t) {
+      Some(v) => self.set_reg(d, v as u32),
+      None => self.exception(Exception::Overflow),
+    }
+  }
+
+  fn op_xori(&mut self, instruction: Instruction) {
+    let i = instruction.imm();
+    let t = instruction.t();
+    let s = instruction.s();
+    let v = self.reg(s) ^ i;
+    self.set_reg(t, v);
+  }
+
+  fn op_cop1(&mut self, _: Instruction) {
+    self.exception(Exception::CoprocessorError);
+  }
+
+  fn op_cop3(&mut self, _: Instruction) {
+    self.exception(Exception::CoprocessorError);
+  }
+
+  fn op_cop2(&mut self, instruction: Instruction) {
+    panic!("unhandled GTE instruction: {:?}", instruction)
+  }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -792,8 +848,10 @@ impl Instruction {
 }
 
 enum Exception {
-  SysCall = 0x08,
-  Overflow = 0x0C,
   LoadAddressError = 0x04,
   StoreAddressError = 0x05,
+  SysCall = 0x08,
+  Break = 0x09,
+  CoprocessorError = 0x0B,
+  Overflow = 0x0C,
 }
