@@ -145,12 +145,16 @@ impl Cpu {
       0x13 => self.op_cop3(instruction),
       0x20 => self.op_lb(instruction),
       0x21 => self.op_lh(instruction),
+      0x22 => self.op_lwl(instruction),
       0x23 => self.op_lw(instruction),
       0x24 => self.op_lbu(instruction),
       0x25 => self.op_lhu(instruction),
+      0x26 => self.op_lwr(instruction),
       0x28 => self.op_sb(instruction),
       0x29 => self.op_sh(instruction),
+      0x2A => self.op_swl(instruction),
       0x2B => self.op_sw(instruction),
+      0x2E => self.op_swr(instruction),
       _ => panic!("Unhandled instruction {:08X} (f: 0b{:06b})", instruction.0, instruction.function()),
     }
   }
@@ -784,6 +788,94 @@ impl Cpu {
 
   fn op_cop2(&mut self, instruction: Instruction) {
     panic!("unhandled GTE instruction: {:?}", instruction)
+  }
+
+  fn op_lwl(&mut self, instruction: Instruction) {
+    let i = instruction.imm_se();
+    let t = instruction.t();
+    let s = instruction.s();
+
+    let addr = self.reg(s).wrapping_add(i);
+    let cur_v = self.out_regs[t.0 as usize];
+
+    let aligned_addr = addr & !0x03;
+    let aligned_word = self.load32(aligned_addr);
+
+    let v = match addr & 0x03 {
+      0 => (cur_v & 0x00FFFFFF) | (aligned_word << 24),
+      1 => (cur_v & 0x0000FFFF) | (aligned_word << 16),
+      2 => (cur_v & 0x000000FF) | (aligned_word << 8),
+      3 => (cur_v & 0x00000000) | (aligned_word << 0),
+      _ => unreachable!(),
+    };
+
+    self.load = (t, v);
+  }
+
+  fn op_lwr(&mut self, instruction: Instruction) {
+    let i = instruction.imm_se();
+    let t = instruction.t();
+    let s = instruction.s();
+
+    let addr = self.reg(s).wrapping_add(i);
+    let cur_v = self.out_regs[t.0 as usize];
+
+    let aligned_addr = addr & !0x03;
+    let aligned_word = self.load32(aligned_addr);
+
+    let v = match addr & 0x03 {
+      0 => (cur_v & 0x00000000) | (aligned_word >> 0),
+      1 => (cur_v & 0xFF000000) | (aligned_word >> 8),
+      2 => (cur_v & 0xFFFF0000) | (aligned_word >> 16),
+      3 => (cur_v & 0xFFFFFF00) | (aligned_word >> 24),
+      _ => unreachable!(),
+    };
+
+    self.load = (t, v);
+  }
+
+  fn op_swl(&mut self, instruction: Instruction) {
+    let i = instruction.imm_se();
+    let t = instruction.t();
+    let s = instruction.s();
+
+    let addr = self.reg(s).wrapping_add(i);
+    let v = self.reg(t);
+
+    let aligned_addr = addr & !0x03;
+    let cur_mem = self.load32(aligned_addr);
+
+    let mem = match addr & 0x03 {
+      0 => (cur_mem & 0xFF000000) | (v >> 24),
+      1 => (cur_mem & 0xFFFF0000) | (v >> 16),
+      2 => (cur_mem & 0xFF000000) | (v >> 8),
+      3 => (cur_mem & 0x00000000) | (v >> 0),
+      _ => unreachable!(),
+    };
+
+    self.store32(aligned_addr, mem);
+  }
+
+  fn op_swr(&mut self, instruction: Instruction) {
+    let i = instruction.imm_se();
+    let t = instruction.t();
+    let s = instruction.s();
+
+    let addr = self.reg(s).wrapping_add(i);
+    let v = self.reg(t);
+
+    let aligned_addr = addr & !0x03;
+    let cur_mem = self.load32(aligned_addr);
+
+    let mem = match addr & 0x03 {
+      0 => (cur_mem & 0x00000000) | (v << 0),
+      1 => (cur_mem & 0x000000FF) | (v << 8),
+      2 => (cur_mem & 0x0000FFFF) | (v << 16),
+      3 => (cur_mem & 0x00FFFFFF) | (v << 24),
+      _ => unreachable!(),
+    };
+
+    self.store32(aligned_addr, mem);
   }
 }
 
