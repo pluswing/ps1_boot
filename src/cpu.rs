@@ -54,7 +54,10 @@ impl Cpu {
       return;
     }
     let instruction = Instruction(self.load32(self.pc));
-    // println!("PC: {:08X} => {:02X} ({:02X})", self.pc, instruction.function(), instruction.subfunction());
+    println!("PC: {:08X} => 0x{:08X} ({:02X}|{:02X})", self.pc, instruction.0, instruction.function(), instruction.subfunction());
+    if self.pc != self.next_pc - 4 {
+      panic!("BREAK");
+    }
     self.pc = self.next_pc;
     self.next_pc = self.next_pc.wrapping_add(4);
 
@@ -122,7 +125,7 @@ impl Cpu {
         0x27 => self.op_nor(instruction),
         0x2A => self.op_slt(instruction),
         0x2B => self.op_sltu(instruction),
-        _ => panic!("Unhandled instrcuntion {:08X} (sub: 0b{:06b})", instruction.0, instruction.subfunction()),
+        _ => self.op_illegal(instruction),
       },
       0x01 => self.op_bxx(instruction),
       0x02 => self.op_j(instruction),
@@ -155,7 +158,15 @@ impl Cpu {
       0x2A => self.op_swl(instruction),
       0x2B => self.op_sw(instruction),
       0x2E => self.op_swr(instruction),
-      _ => panic!("Unhandled instruction {:08X} (f: 0b{:06b})", instruction.0, instruction.function()),
+      0x30 => self.op_lwc0(instruction),
+      0x31 => self.op_lwc1(instruction),
+      0x32 => self.op_lwc2(instruction),
+      0x33 => self.op_lwc3(instruction),
+      0x38 => self.op_swc0(instruction),
+      0x39 => self.op_swc1(instruction),
+      0x3A => self.op_swc2(instruction),
+      0x3B => self.op_swc3(instruction),
+      _ => self.op_illegal(instruction),
     }
   }
 
@@ -877,6 +888,38 @@ impl Cpu {
 
     self.store32(aligned_addr, mem);
   }
+
+  fn op_lwc0(&mut self, instruction: Instruction) {
+    self.exception(Exception::CoprocessorError);
+  }
+  fn op_lwc1(&mut self, instruction: Instruction) {
+    self.exception(Exception::CoprocessorError);
+  }
+  fn op_lwc2(&mut self, instruction: Instruction) {
+    panic!("unhandled GTE LWC: {:08X}", instruction.0);
+  }
+  fn op_lwc3(&mut self, instruction: Instruction) {
+    self.exception(Exception::CoprocessorError);
+  }
+
+  fn op_swc0(&mut self, instruction: Instruction) {
+    self.exception(Exception::CoprocessorError);
+  }
+  fn op_swc1(&mut self, instruction: Instruction) {
+    self.exception(Exception::CoprocessorError);
+  }
+  fn op_swc2(&mut self, instruction: Instruction) {
+    panic!("unhandled GTE SWC: {:08X}", instruction.0);
+  }
+  fn op_swc3(&mut self, instruction: Instruction) {
+    self.exception(Exception::CoprocessorError);
+  }
+
+  fn op_illegal(&mut self, instruction: Instruction) {
+    println!("Illegal instruction {:?}!", instruction);
+    self.exception(Exception::IllegalInstruction);
+  }
+
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -944,6 +987,7 @@ enum Exception {
   StoreAddressError = 0x05,
   SysCall = 0x08,
   Break = 0x09,
+  IllegalInstruction = 0x0A,
   CoprocessorError = 0x0B,
   Overflow = 0x0C,
 }
