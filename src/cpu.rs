@@ -857,7 +857,7 @@ impl Cpu {
     let cur_mem = self.load32(aligned_addr);
 
     let mem = match addr & 0x03 {
-      0 => (cur_mem & 0xFF000000) | (v >> 24),
+      0 => (cur_mem & 0xFFFFFF00) | (v >> 24),
       1 => (cur_mem & 0xFFFF0000) | (v >> 16),
       2 => (cur_mem & 0xFF000000) | (v >> 8),
       3 => (cur_mem & 0x00000000) | (v >> 0),

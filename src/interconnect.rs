@@ -1,9 +1,12 @@
-use crate::{bios::Bios, ram::Ram};
+use core::panic;
+
+use crate::{bios::Bios, dma::Dma, ram::Ram};
 
 
 pub struct Interconnect {
   bios: Bios,
   ram: Ram,
+  dma: Dma,
 }
 
 impl Interconnect {
@@ -11,6 +14,7 @@ impl Interconnect {
     Self {
       bios,
       ram: Ram::new(),
+      dma: Dma::new(),
     }
   }
 
@@ -31,8 +35,7 @@ impl Interconnect {
       return 0;
     }
     if let Some(offset) = map::DMA.contains(abs_addr) {
-      println!("DMA read: {:08X}", offset);
-      return 0;
+      return self.dma_reg(offset);
     }
     if let Some(offset) = map::GPU.contains(abs_addr) {
       println!("GPU read: {:08X}", offset);
@@ -41,6 +44,7 @@ impl Interconnect {
         _ => 0, // GP0
       };
     }
+
     panic!("unhandled load32 at address {:08X}", addr);
   }
 
@@ -78,9 +82,8 @@ impl Interconnect {
       println!("IRQ control: {:X} <- {:08X}", offset, val);
       return;
     }
-    if let Some(_) = map::DMA.contains(abs_addr) {
-      println!("DMA write: {:08X} {:08X}", abs_addr, val);
-      return;
+    if let Some(offset) = map::DMA.contains(abs_addr) {
+      return self.set_dma_reg(offset, val);
     }
     if let Some(offset) = map::GPU.contains(abs_addr) {
       println!("GPU write: {:08X} {:08X}", offset, val);
@@ -177,6 +180,20 @@ impl Interconnect {
     }
 
     panic!("Unhandled load8 at address {:08X}", addr);
+  }
+
+  fn dma_reg(&self, offset: u32) -> u32 {
+    match offset {
+      0x70 => self.dma.control(),
+      _ => panic!("unhandled DMA read access")
+    }
+  }
+
+  fn set_dma_reg(&mut self, offset: u32, val: u32) {
+    match offset {
+      0x70 => self.dma.set_control(val),
+      _ => panic!("unhandled DMA write access")
+    }
   }
 }
 
