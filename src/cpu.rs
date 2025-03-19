@@ -55,9 +55,6 @@ impl Cpu {
     }
     let instruction = Instruction(self.load32(self.pc));
     println!("PC: {:08X} => 0x{:08X} ({:02X}|{:02X})", self.pc, instruction.0, instruction.function(), instruction.subfunction());
-    if self.pc != self.next_pc - 4 {
-      panic!("BREAK");
-    }
     self.pc = self.next_pc;
     self.next_pc = self.next_pc.wrapping_add(4);
 
