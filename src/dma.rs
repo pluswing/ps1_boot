@@ -1,3 +1,5 @@
+use crate::channel::Channel;
+
 pub struct Dma {
   control: u32,
 
@@ -6,6 +8,8 @@ pub struct Dma {
   channel_irq_flags: u8,
   force_irq: bool,
   irq_dummy: u8,
+
+  channels: [Channel; 7],
 }
 
 impl Dma {
@@ -17,6 +21,7 @@ impl Dma {
       channel_irq_flags: 0,
       force_irq: false,
       irq_dummy: 0,
+      channels: [Channel::new(); 7],
     }
   }
 
@@ -49,5 +54,38 @@ impl Dma {
     self.irq_en = (val >> 23) & 1 != 0;
     let ack = ((val >> 24) & 0x3F) as u8;
     self.channel_irq_flags = self.channel_irq_flags & !ack;
+  }
+
+  pub fn channel(&self, port: Port) -> &Channel {
+    &self.channels[port as usize]
+  }
+
+  pub fn channel_mut(&mut self, port: Port) -> &mut Channel {
+    &mut self.channels[port as usize]
+  }
+}
+
+pub enum Port {
+  MdecIn = 0,
+  MdecOut = 1,
+  Gpu = 2,
+  CdRom = 3,
+  Spu = 4,
+  Pio = 5,
+  Otc = 6,
+}
+
+impl Port {
+  pub fn from_index(index: u32) -> Port {
+    match index {
+      0 => Port::MdecIn,
+      1 => Port::MdecOut,
+      2 => Port::Gpu,
+      3 => Port::CdRom,
+      4 => Port::Spu,
+      5 => Port::Pio,
+      6 => Port::Otc,
+      n => panic!("Invalid port: {}", n),
+    }
   }
 }

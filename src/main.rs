@@ -9,6 +9,7 @@ mod bios;
 mod interconnect;
 mod ram;
 mod dma;
+mod channel;
 
 fn main() {
   let bios = Bios::new(&Path::new("bios/BIOS.ROM")).unwrap();
