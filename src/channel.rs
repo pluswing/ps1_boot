@@ -9,6 +9,11 @@ pub struct Channel {
   chop_dma_sz: u8,
   chop_cpu_sz: u8,
   dummy: u8,
+
+  base: u32,
+
+  block_size: u16,
+  block_count: u16,
 }
 
 impl Channel {
@@ -23,6 +28,11 @@ impl Channel {
       chop_dma_sz: 0,
       chop_cpu_sz: 0,
       dummy: 0,
+
+      base: 0,
+
+      block_size: 0,
+      block_count: 0,
     }
   }
 
@@ -60,6 +70,25 @@ impl Channel {
     self.enable = (val >> 24) & 1 != 0;
     self.trigger = (val >> 28) & 1 != 0;
     self.dummy = ((val >> 29) & 3) as u8;
+  }
+
+  pub fn base(&self) -> u32 {
+    self.base
+  }
+
+  pub fn set_base(&mut self, val: u32) {
+    self.base = val & 0x00FF_FFFF;
+  }
+
+  pub fn block_control(&self) -> u32 {
+    let bs = self.block_size as u32;
+    let bc = self.block_count as u32;
+    (bc << 16) | bs
+  }
+
+  pub fn set_block_control(&mut self, val: u32) {
+    self.block_size = val as u16;
+    self.block_count = (val >> 16) as u16;
   }
 }
 

@@ -1,6 +1,6 @@
 use core::panic;
 
-use crate::{bios::Bios, dma::Dma, ram::Ram};
+use crate::{bios::Bios, dma::{Dma, Port}, ram::Ram};
 
 
 pub struct Interconnect {
@@ -183,13 +183,51 @@ impl Interconnect {
   }
 
   fn dma_reg(&self, offset: u32) -> u32 {
-    match offset {
-      0x70 => self.dma.control(),
-      _ => panic!("unhandled DMA read access")
+    let major = (offset & 0x70) >> 4;
+    let minor = offset & 0x0F;
+
+    match major {
+      0..=6 => {
+        let channel = self.dma.channel(Port::from_index(major));
+
+        match minor {
+          8 => channel.control(),
+          _ => panic!("Unhandled DMA read at {:08X}", offset)
+        }
+      },
+
+      7 => match minor {
+        0 => self.dma.control(),
+        4 => self.dma.interrupt(),
+        _ => panic!("Unhandled DMA read at {:08X}", offset)
+      }
+      _ => panic!("Unhandled DMA read at {:08X}", offset)
     }
   }
 
   fn set_dma_reg(&mut self, offset: u32, val: u32) {
+    let major = (offset & 0x70) >> 4;
+    let minor = offset & 0x0F;
+
+    match major {
+      0..=6 => {
+        let port = Port::from_index(major);
+        let channel = self.dma.channel_mut(port);
+
+        match minor {
+          8 => channel.set_control(val),
+          _ => panic!("Unhandled DMA write at {:08X}: {:08X}", offset, val)
+        }
+      },
+
+      7 => match minor {
+        0 => self.dma.set_control(val),
+        4 => self.dma.set_interrupt(val),
+        _ => panic!("Unhandled DMA write at {:08X}: {:08X}", offset, val)
+      }
+      _ => panic!("Unhandled DMA write at {:08X}: {:08X}", offset, val)
+    }
+
     match offset {
       0x70 => self.dma.set_control(val),
       _ => panic!("unhandled DMA write access")
