@@ -90,6 +90,14 @@ impl Channel {
     self.block_size = val as u16;
     self.block_count = (val >> 16) as u16;
   }
+
+  pub fn active(&self) -> bool {
+    let trigger = match self.sync {
+      Sync::Manual => self.trigger,
+      _ => true,
+    };
+    self.enable && trigger
+  }
 }
 
 #[derive(Debug, Clone, Copy)]

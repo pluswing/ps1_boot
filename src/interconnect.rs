@@ -1,6 +1,6 @@
 use core::panic;
 
-use crate::{bios::Bios, dma::{Dma, Port}, ram::Ram};
+use crate::{bios::Bios, channel::Sync, dma::{Dma, Port}, ram::Ram};
 
 
 pub struct Interconnect {
@@ -209,28 +209,45 @@ impl Interconnect {
     let major = (offset & 0x70) >> 4;
     let minor = offset & 0x0F;
 
-    match major {
+    let active_port = match major {
       0..=6 => {
         let port = Port::from_index(major);
         let channel = self.dma.channel_mut(port);
 
         match minor {
+          0 => channel.set_base(val),
+          4 => channel.set_block_control(val),
           8 => channel.set_control(val),
           _ => panic!("Unhandled DMA write at {:08X}: {:08X}", offset, val)
         }
+
+        if channel.active() {
+          Some(port)
+        } else {
+          None
+        }
       },
 
-      7 => match minor {
-        0 => self.dma.set_control(val),
-        4 => self.dma.set_interrupt(val),
-        _ => panic!("Unhandled DMA write at {:08X}: {:08X}", offset, val)
+      7 => {
+        match minor {
+          0 => self.dma.set_control(val),
+          4 => self.dma.set_interrupt(val),
+          _ => panic!("Unhandled DMA write at {:08X}: {:08X}", offset, val)
+        }
+        None
       }
       _ => panic!("Unhandled DMA write at {:08X}: {:08X}", offset, val)
-    }
+    };
 
-    match offset {
-      0x70 => self.dma.set_control(val),
-      _ => panic!("unhandled DMA write access")
+    if let Some(port) = active_port {
+      self.do_dma(port);
+    }
+  }
+
+  fn do_dma(&mut self, port: Port) {
+    match self.dma.channel(port).sync() {
+      Sync::LinkedList => panic!("Linked list mode unsupported"),
+      _ => self.do_dma_block(port),
     }
   }
 }
