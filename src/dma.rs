@@ -65,6 +65,7 @@ impl Dma {
   }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum Port {
   MdecIn = 0,
   MdecOut = 1,

@@ -98,6 +98,33 @@ impl Channel {
     };
     self.enable && trigger
   }
+
+  pub fn direction(&self) -> Direction {
+    self.direction
+  }
+
+  pub fn step(&self) -> Step {
+    self.step
+  }
+
+  pub fn sync(&self) -> Sync {
+    self.sync
+  }
+
+  pub fn transfer_size(&self) -> Option<u32> {
+    let bs = self.block_size as u32;
+    let bc = self.block_count as u32;
+    match self.sync {
+      Sync::Manual => Some(bs),
+      Sync::Request => Some(bc * bs),
+      Sync::LinkedList => None,
+    }
+  }
+
+  pub fn done(&mut self) {
+    self.enable = false;
+    self.trigger = false;
+  }
 }
 
 #[derive(Debug, Clone, Copy)]

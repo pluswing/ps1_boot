@@ -1,6 +1,6 @@
 use core::panic;
 
-use crate::{bios::Bios, channel::Sync, dma::{Dma, Port}, ram::Ram};
+use crate::{bios::Bios, channel::{Direction, Step, Sync}, dma::{Dma, Port}, ram::Ram};
 
 
 pub struct Interconnect {
@@ -40,7 +40,7 @@ impl Interconnect {
     if let Some(offset) = map::GPU.contains(abs_addr) {
       println!("GPU read: {:08X}", offset);
       return match offset {
-        4 => 0x1000_0000, // GP1
+        4 => 0x1C00_0000, // GP1
         _ => 0, // GP0
       };
     }
@@ -249,6 +249,39 @@ impl Interconnect {
       Sync::LinkedList => panic!("Linked list mode unsupported"),
       _ => self.do_dma_block(port),
     }
+  }
+
+  fn do_dma_block(&mut self, port: Port) {
+    let channel = self.dma.channel_mut(port);
+    let increment = channel.step();
+    let mut addr = channel.base();
+    let mut remsz = match channel.transfer_size() {
+      Some(n) => n,
+      None => panic!("Couldn't figure out DMA block transfer size"),
+    };
+    while remsz > 0 {
+      let cur_addr = addr & 0x001F_FFFC;
+      match channel.direction() {
+        Direction::FromRam => panic!("Unhandled DMA direction"),
+        Direction::ToRam => {
+          let src_word = match port {
+            Port::Otc => match remsz {
+              1 => 0x00FF_FFFF,
+              _ => addr.wrapping_sub(4) & 0x001F_FFFF,
+            },
+            _ => panic!("Unhandled DMA source port: {}", port as u8),
+          };
+          self.ram.store32(cur_addr, src_word);
+        }
+      }
+
+      addr = match increment {
+        Step::Increment => addr.wrapping_add(4),
+        Step::Decrement => addr.wrapping_sub(4)
+      };
+      remsz = remsz - 1;
+    }
+    channel.done();
   }
 }
 
