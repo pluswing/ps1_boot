@@ -246,7 +246,7 @@ impl Interconnect {
 
   fn do_dma(&mut self, port: Port) {
     match self.dma.channel(port).sync() {
-      Sync::LinkedList => panic!("Linked list mode unsupported"),
+      Sync::LinkedList => self.do_dma_linked_list(port),
       _ => self.do_dma_block(port),
     }
   }
@@ -262,7 +262,13 @@ impl Interconnect {
     while remsz > 0 {
       let cur_addr = addr & 0x001F_FFFC;
       match channel.direction() {
-        Direction::FromRam => panic!("Unhandled DMA direction"),
+        Direction::FromRam => {
+          let src_word = self.ram.load32(cur_addr);
+          match port {
+            Port::Gpu => println!("GPU data {:08X}", src_word),
+            _ => panic!("Unhandled DMA destination port {}", port as u8),
+          }
+        },
         Direction::ToRam => {
           let src_word = match port {
             Port::Otc => match remsz {
@@ -280,6 +286,35 @@ impl Interconnect {
         Step::Decrement => addr.wrapping_sub(4)
       };
       remsz = remsz - 1;
+    }
+    channel.done();
+  }
+
+  fn do_dma_linked_list(&mut self, port: Port) {
+    let channel = self.dma.channel_mut(port);
+    let mut addr = channel.base() & 0x001F_FFFC;
+    if channel.direction() == Direction::ToRam {
+      panic!("Invalid DMA direction for linked list mode");
+    }
+    if port != Port::Gpu {
+      panic!("Attempt linked list DMA on port {}", port as u8);
+    }
+
+    loop {
+      let header = self.ram.load32(addr);
+      let mut remsz = header >> 24;
+      while remsz > 0 {
+        addr = addr.wrapping_add(4) & 0x001F_FFFC;
+        let command = self.ram.load32(addr);
+        println!("GPU command {:08X}", command);
+        remsz = remsz + 1;
+      }
+
+      if header & 0x0080_0000 != 0 {
+        break;
+      }
+
+      addr = header & 0x001F_FFFC;
     }
     channel.done();
   }

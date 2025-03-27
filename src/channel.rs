@@ -127,7 +127,7 @@ impl Channel {
   }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Direction {
   ToRam = 0,
   FromRam = 1,
