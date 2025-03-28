@@ -307,7 +307,7 @@ impl Interconnect {
         addr = addr.wrapping_add(4) & 0x001F_FFFC;
         let command = self.ram.load32(addr);
         println!("GPU command {:08X}", command);
-        remsz = remsz + 1;
+        remsz = remsz - 1;
       }
 
       if header & 0x0080_0000 != 0 {

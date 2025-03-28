@@ -54,7 +54,7 @@ impl Cpu {
       return;
     }
     let instruction = Instruction(self.load32(self.pc));
-    println!("PC: {:08X} => 0x{:08X} ({:02X}|{:02X})", self.pc, instruction.0, instruction.function(), instruction.subfunction());
+    println!("PC: {:08X} => 0x{:08X} ({:02X}|{:02X}) {:?} REGS:{:?}", self.pc, instruction.0, instruction.function(), instruction.subfunction(), instruction_name(instruction), self.regs.iter().map(|x| format!("{:08X}, ", x)).collect::<String>());
     self.pc = self.next_pc;
     self.next_pc = self.next_pc.wrapping_add(4);
 
@@ -360,7 +360,7 @@ impl Cpu {
 
   fn op_jal(&mut self, instruction: Instruction) {
     let ra = self.pc;
-    self.set_reg(RegisterIndex(31), ra);
+    self.set_reg(RegisterIndex(31), ra.wrapping_add(4));
     self.op_j(instruction);
   }
 
@@ -987,4 +987,80 @@ enum Exception {
   IllegalInstruction = 0x0A,
   CoprocessorError = 0x0B,
   Overflow = 0x0C,
+}
+
+fn instruction_name(instruction: Instruction) -> &'static str {
+  match instruction.function() {
+    0b000000 => match instruction.subfunction() {
+      0x00 => "sll",
+      0x02 => "srl",
+      0x03 => "sra",
+      0x04 => "sllv",
+      0x06 => "srlv",
+      0x07 => "srav",
+      0x08 => "jr",
+      0x09 => "jalr",
+      0x0C => "syscall",
+      0x0D => "break",
+      0x10 => "mfhi",
+      0x11 => "mthi",
+      0x12 => "mflo",
+      0x13 => "mtlo",
+      0x18 => "mult",
+      0x19 => "multu",
+      0x1A => "div",
+      0x1B => "divu",
+      0x20 => "add",
+      0x21 => "addu",
+      0x22 => "sub",
+      0x23 => "subu",
+      0x24 => "and",
+      0x25 => "or",
+      0x26 => "xor",
+      0x27 => "nor",
+      0x2A => "slt",
+      0x2B => "sltu",
+      _ => "illegal",
+    },
+    0x01 => "bxx",
+    0x02 => "j",
+    0x03 => "jal",
+    0x04 => "beq",
+    0x05 => "bne",
+    0x06 => "blez",
+    0x07 => "bgtz",
+    0x08 => "addi",
+    0x09 => "addiu",
+    0x0A => "slti",
+    0x0B => "sltiu",
+    0x0C => "andi",
+    0x0D => "ori",
+    0x0E => "xori",
+    0x0F => "lui",
+    0x10 => "cop0",
+    0x11 => "cop1",
+    0x12 => "cop2",
+    0x13 => "cop3",
+    0x20 => "lb",
+    0x21 => "lh",
+    0x22 => "lwl",
+    0x23 => "lw",
+    0x24 => "lbu",
+    0x25 => "lhu",
+    0x26 => "lwr",
+    0x28 => "sb",
+    0x29 => "sh",
+    0x2A => "swl",
+    0x2B => "sw",
+    0x2E => "swr",
+    0x30 => "lwc0",
+    0x31 => "lwc1",
+    0x32 => "lwc2",
+    0x33 => "lwc3",
+    0x38 => "swc0",
+    0x39 => "swc1",
+    0x3A => "swc2",
+    0x3B => "swc3",
+    _ => "illegal",
+  }
 }
