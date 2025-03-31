@@ -54,7 +54,7 @@ impl Cpu {
       return;
     }
     let instruction = Instruction(self.load32(self.pc));
-    println!("PC: {:08X} => 0x{:08X} ({:02X}|{:02X}) {:?} REGS:{:?}", self.pc, instruction.0, instruction.function(), instruction.subfunction(), instruction_name(instruction), self.regs.iter().map(|x| format!("{:08X}, ", x)).collect::<String>());
+    // println!("PC: {:08X} => 0x{:08X} ({:02X}|{:02X}) {:?} REGS:{:?} B0={:08X}", self.pc, instruction.0, instruction.function(), instruction.subfunction(), instruction_name(instruction), self.regs.iter().map(|x| format!("{:08X}, ", x)).collect::<String>(), self.load32(0x000000B0));
     self.pc = self.next_pc;
     self.next_pc = self.next_pc.wrapping_add(4);
 
@@ -192,6 +192,11 @@ impl Cpu {
   }
 
   fn op_sw(&mut self, instruction: Instruction) {
+    if self.sr & 0x1_0000 != 0 {
+      println!("Ignoring load while cache is isolated");
+      return;
+    }
+
     let i = instruction.imm_se();
     let t = instruction.t();
     let s = instruction.s();

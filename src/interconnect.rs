@@ -44,6 +44,10 @@ impl Interconnect {
         _ => 0, // GP0
       };
     }
+    if let Some(offset) = map::TIMERS.contains(abs_addr) {
+      println!("Unhandled write to timer register {:08X}", offset);
+      return 0;
+    }
 
     panic!("unhandled load32 at address {:08X}", addr);
   }
