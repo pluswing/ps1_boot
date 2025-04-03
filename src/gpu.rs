@@ -17,6 +17,9 @@ pub struct Gpu {
   display_disabled: bool,
   interrupt: bool,
   dma_direction: DmaDirection,
+
+  rectangle_texture_x_flip: bool,
+  rectangle_texture_y_flip: bool,
 }
 
 impl Gpu {
@@ -40,6 +43,8 @@ impl Gpu {
       display_disabled: true,
       interrupt: false,
       dma_direction: DmaDirection::Off,
+      rectangle_texture_x_flip: false,
+      rectangle_texture_y_flip: false,
     }
   }
 
@@ -75,6 +80,33 @@ impl Gpu {
     };
     r | dma_request << 25
   }
+
+  pub fn gp0(&mut self, val: u32) {
+    let opcode = (val >> 24) & 0xFF;
+    match opcode {
+      0x00 => (), // NOP
+      0xE1 => self.gp0_draw_mode(val),
+      _ => panic!("Unhandled GP0 command {:08X}", val)
+    }
+  }
+
+  fn gp0_draw_mode(&mut self, val: u32) {
+    self.page_base_x = (val & 0x0F) as u8;
+    self.page_base_y = ((val >> 4) & 1) as u8;
+    self.semi_transparency = ((val >> 5) & 3) as u8;
+
+    self.texture_depth = match (val >> 7) & 3 {
+      0 => TextureDepth::T4Bit,
+      1 => TextureDepth::T8Bit,
+      2 => TextureDepth::T15Bit,
+      n => panic!("Unhandled texture depth {}", n),
+    };
+    self.dithering = ((val >> 9) & 1) != 0;
+    self.draw_to_display = ((val >> 10) & 1) != 0;
+    self.texture_disable = ((val >> 11) & 1) != 0;
+    self.rectangle_texture_x_flip = ((val >> 12) & 1) != 0;
+    self.rectangle_texture_y_flip = ((val >> 13) & 1) != 0;
+  }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -86,8 +118,8 @@ enum TextureDepth {
 
 #[derive(Debug, Clone, Copy)]
 enum Field {
-  Top = 0,
-  Bottom = 1,
+  Top = 1,
+  Bottom = 0,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -95,7 +127,7 @@ struct HorizontalRes(u8);
 
 impl HorizontalRes {
   fn from_fields(hr1: u8, hr2: u8) -> Self {
-    let hr = (hr2 & 1) | (hr1 & 3) << 1;
+    let hr = (hr2 & 1) | ((hr1 & 3) << 1);
     Self(hr)
   }
 

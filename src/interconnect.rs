@@ -1,12 +1,13 @@
 use core::panic;
 
-use crate::{bios::Bios, channel::{Direction, Step, Sync}, dma::{Dma, Port}, ram::Ram};
+use crate::{bios::Bios, channel::{Direction, Step, Sync}, dma::{Dma, Port}, gpu::Gpu, ram::Ram};
 
 
 pub struct Interconnect {
   bios: Bios,
   ram: Ram,
   dma: Dma,
+  gpu: Gpu,
 }
 
 impl Interconnect {
@@ -15,6 +16,7 @@ impl Interconnect {
       bios,
       ram: Ram::new(),
       dma: Dma::new(),
+      gpu: Gpu::new(),
     }
   }
 
@@ -90,7 +92,10 @@ impl Interconnect {
       return self.set_dma_reg(offset, val);
     }
     if let Some(offset) = map::GPU.contains(abs_addr) {
-      println!("GPU write: {:08X} {:08X}", offset, val);
+      match offset {
+        0 => self.gpu.gp0(val),
+        _ => panic!("GPU write: {:08X} {:08X}", offset, val),
+      }
       return;
     }
     if let Some(offset) = map::TIMERS.contains(abs_addr) {
