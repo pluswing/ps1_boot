@@ -94,6 +94,7 @@ impl Interconnect {
     if let Some(offset) = map::GPU.contains(abs_addr) {
       match offset {
         0 => self.gpu.gp0(val),
+        4 => self.gpu.gp1(val),
         _ => panic!("GPU write: {:08X} {:08X}", offset, val),
       }
       return;
