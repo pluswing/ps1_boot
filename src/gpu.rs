@@ -121,6 +121,9 @@ impl Gpu {
     match opcode {
       0x00 => (), // NOP
       0xE1 => self.gp0_draw_mode(val),
+      0xE3 => self.gp0_drawing_area_top_left(val),
+      0xE4 => self.gp0_drawing_area_bottom_right(val),
+      0xE5 => self.gp0_drawing_offset(val),
       _ => panic!("Unhandled GP0 command {:08X}", val)
     }
   }
@@ -143,11 +146,30 @@ impl Gpu {
     self.rectangle_texture_y_flip = ((val >> 13) & 1) != 0;
   }
 
+  fn gp0_drawing_area_top_left(&mut self, val: u32) {
+    self.drawing_area_top = ((val >> 10) & 0x03FF) as u16;
+    self.drawing_area_left = (val & 0x03FF) as u16;
+  }
+
+  fn gp0_drawing_area_bottom_right(&mut self, val: u32) {
+    self.drawing_area_bottom = ((val >> 10) & 0x03FF) as u16;
+    self.drawing_area_right = (val & 0x03FF) as u16;
+  }
+
+  fn gp0_drawing_offset(&mut self, val: u32) {
+    let x = (val & 0x07FF) as u16;
+    let y = ((val >> 11) & 0x07FF) as u16;
+    self.drawing_x_offset = ((x << 5) as i16) >> 5;
+    self.drawing_y_offset = ((y << 5) as i16) >> 5;
+  }
+
   pub fn gp1(&mut self, val: u32) {
     let opcode = (val >> 24) & 0xFF;
     match opcode {
       0x00 => self.gp1_reset(val),
-      _ => panic!("Unhandled GP0 command {:08X}", val)
+      0x04 => self.gp1_dma_direction(val),
+      0x08 => self.gp1_display_mode(val),
+      _ => panic!("Unhandled GP1 command {:08X}", val)
     }
   }
 
@@ -192,6 +214,44 @@ impl Gpu {
 
     // XXX clear command FIFO
     // XXX invalidate GPU cache
+  }
+
+  fn gp1_display_mode(&mut self, val: u32) {
+    let hr1 = (val & 3) as u8;
+    let hr2 = ((val >> 6) & 1) as u8;
+
+    self.hres = HorizontalRes::from_fields(hr1, hr2);
+
+    self.vres = match val & 0x04 != 0 {
+      false => VerticalRes::Y240Lines,
+      true => VerticalRes::Y480Lines,
+    };
+
+    self.vmode = match val & 0x08 != 0 {
+      false => VMode::Ntsc,
+      true => VMode::Pal,
+    };
+
+    self.display_depth = match val & 0x10 != 0 {
+      false => DisplayDepth::D24Bits,
+      true => DisplayDepth::D15Bits,
+    };
+
+    self.interlaced = val & 0x20 != 0;
+
+    if val & 0x80 != 0 {
+      panic!("Unsupported display mode: {:08X}", val);
+    }
+  }
+
+  fn gp1_dma_direction(&mut self, val: u32) {
+    self.dma_direction = match val & 3 {
+      0 => DmaDirection::Off,
+      1 => DmaDirection::Fifo,
+      2 => DmaDirection::CpuToGp0,
+      3 => DmaDirection::VramToCpu,
+      _ => unreachable!(),
+    };
   }
 
   pub fn read(&self) -> u32 {
