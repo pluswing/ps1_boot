@@ -121,9 +121,11 @@ impl Gpu {
     match opcode {
       0x00 => (), // NOP
       0xE1 => self.gp0_draw_mode(val),
+      0xE2 => self.gp0_texture_window(val),
       0xE3 => self.gp0_drawing_area_top_left(val),
       0xE4 => self.gp0_drawing_area_bottom_right(val),
       0xE5 => self.gp0_drawing_offset(val),
+      0xE6 => self.gp0_mask_bit_setting(val),
       _ => panic!("Unhandled GP0 command {:08X}", val)
     }
   }
@@ -163,11 +165,26 @@ impl Gpu {
     self.drawing_y_offset = ((y << 5) as i16) >> 5;
   }
 
+  fn gp0_texture_window(&mut self, val: u32) {
+    self.texture_window_x_mask = (val & 0x1F) as u8;
+    self.texture_window_y_mask = ((val >> 5) & 0x1F) as u8;
+    self.texture_window_x_offset = ((val >> 10) & 0x1F) as u8;
+    self.texture_window_y_offset = ((val >> 15) & 0x1F) as u8;
+  }
+
+  fn gp0_mask_bit_setting(&mut self, val: u32) {
+    self.force_set_mask_bit = (val & 1) != 0;
+    self.preserve_masked_pixels = (val & 2) != 0;
+  }
+
   pub fn gp1(&mut self, val: u32) {
     let opcode = (val >> 24) & 0xFF;
     match opcode {
       0x00 => self.gp1_reset(val),
       0x04 => self.gp1_dma_direction(val),
+      0x05 => self.gp1_display_vram_start(val),
+      0x06 => self.gp1_display_hirozontal_range(val),
+      0x07 => self.gp1_display_vertical_range(val),
       0x08 => self.gp1_display_mode(val),
       _ => panic!("Unhandled GP1 command {:08X}", val)
     }
@@ -254,6 +271,21 @@ impl Gpu {
     };
   }
 
+  fn gp1_display_vram_start(&mut self, val: u32) {
+    self.display_vram_x_start = (val & 0x03FE) as u16;
+    self.display_vram_y_start = ((val >> 10) & 0x1FF) as u16;
+  }
+
+  fn gp1_display_hirozontal_range(&mut self, val: u32) {
+    self.display_horiz_start = (val & 0x0FFF) as u16;
+    self.display_horiz_end = ((val >> 12) & 0x0FFF) as u16;
+  }
+
+  fn gp1_display_vertical_range(&mut self, val: u32) {
+    self.display_line_start = (val & 0x03FF) as u16;
+    self.display_line_end = ((val >> 10) & 0x03FF) as u16;
+  }
+
   pub fn read(&self) -> u32 {
     0
   }
@@ -311,4 +343,37 @@ enum DmaDirection {
   Fifo = 1,
   CpuToGp0 = 2,
   VramToCpu = 3,
+}
+
+struct CommandBuffer {
+  buffer: [u32; 12],
+  len: u8,
+}
+
+impl CommandBuffer {
+  fn new() -> Self {
+    Self {
+      buffer: [0; 12],
+      len: 0,
+    }
+  }
+
+  fn clear(&mut self) {
+    self.len = 0;
+  }
+
+  fn push_word(&mut self, word: u32) {
+    self.buffer[self.len as usize] = word;
+    self.len = self.len + 1;
+  }
+}
+
+impl ::std::ops::Index<usize> for CommandBuffer {
+  type Output = u32;
+  fn index<'a>(&'a self, index: usize) -> &'a u32 {
+    if index >= self.len as usize {
+      panic!("Command Buffer index out of range: {} ({})", index, self.len);
+    }
+    &self.buffer[index]
+  }
 }
