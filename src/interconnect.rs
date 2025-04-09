@@ -40,10 +40,10 @@ impl Interconnect {
       return self.dma_reg(offset);
     }
     if let Some(offset) = map::GPU.contains(abs_addr) {
-      println!("GPU read: {:08X}", offset);
       return match offset {
-        4 => 0x1C00_0000, // GP1
-        _ => 0, // GP0
+        0 => self.gpu.read(),
+        4 => self.gpu.status(),
+        _ => panic!("GPU read: {:08X}", offset),
       };
     }
     if let Some(offset) = map::TIMERS.contains(abs_addr) {

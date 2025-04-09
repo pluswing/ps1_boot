@@ -37,6 +37,10 @@ pub struct Gpu {
   display_horiz_end: u16,
   display_line_start: u16,
   display_line_end: u16,
+
+  gp0_command: CommandBuffer,
+  gp0_command_remaining: u32,
+  gp0_command_method: fn(&mut Gpu),
 }
 
 impl Gpu {
@@ -80,6 +84,10 @@ impl Gpu {
       display_horiz_end: 0,
       display_line_start: 0,
       display_line_end: 0,
+
+      gp0_command: CommandBuffer::new(),
+      gp0_command_remaining: 0,
+      gp0_command_method: Gpu::gp0_nop as fn(&mut Gpu),
     }
   }
 
@@ -95,7 +103,7 @@ impl Gpu {
     (self.field as u32) << 13 |
     (self.texture_disable as u32) << 15 |
     self.hres.into_status() |
-    (self.vres as u32) << 19 |
+    // (self.vres as u32) << 19 |
     (self.vmode as u32) << 20 |
     (self.display_depth as u32) << 21 |
     (self.interlaced as u32) << 22 |
@@ -117,20 +125,37 @@ impl Gpu {
   }
 
   pub fn gp0(&mut self, val: u32) {
-    let opcode = (val >> 24) & 0xFF;
-    match opcode {
-      0x00 => (), // NOP
-      0xE1 => self.gp0_draw_mode(val),
-      0xE2 => self.gp0_texture_window(val),
-      0xE3 => self.gp0_drawing_area_top_left(val),
-      0xE4 => self.gp0_drawing_area_bottom_right(val),
-      0xE5 => self.gp0_drawing_offset(val),
-      0xE6 => self.gp0_mask_bit_setting(val),
-      _ => panic!("Unhandled GP0 command {:08X}", val)
+    if self.gp0_command_remaining == 0 {
+      let opcode = (val >> 24) & 0xFF;
+      let (len, method) = match opcode {
+        0x00 => (1, Gpu::gp0_nop as fn(&mut Gpu)),
+        0x01 => (1, Gpu::gp0_clear_cache as fn(&mut Gpu)),
+        0x28 => (5, Gpu::gp0_quad_mono_opaque as fn(&mut Gpu)),
+        0xE1 => (1, Gpu::gp0_draw_mode as fn(&mut Gpu)),
+        0xE2 => (1, Gpu::gp0_texture_window as fn(&mut Gpu)),
+        0xE3 => (1, Gpu::gp0_drawing_area_top_left as fn(&mut Gpu)),
+        0xE4 => (1, Gpu::gp0_drawing_area_bottom_right as fn(&mut Gpu)),
+        0xE5 => (1, Gpu::gp0_drawing_offset as fn(&mut Gpu)),
+        0xE6 => (1, Gpu::gp0_mask_bit_setting as fn(&mut Gpu)),
+        _ => panic!("Unhandled GP0 command {:08X}", val)
+      };
+      self.gp0_command_remaining = len;
+      self.gp0_command_method = method;
+      self.gp0_command.clear();
+    }
+    self.gp0_command.push_word(val);
+    self.gp0_command_remaining = self.gp0_command_remaining - 1;
+    if self.gp0_command_remaining == 0 {
+      (self.gp0_command_method)(self)
     }
   }
 
-  fn gp0_draw_mode(&mut self, val: u32) {
+  fn gp0_nop(&mut self) {
+    // NOPなので何もしない
+  }
+
+  fn gp0_draw_mode(&mut self) {
+    let val = self.gp0_command[0];
     self.page_base_x = (val & 0x0F) as u8;
     self.page_base_y = ((val >> 4) & 1) as u8;
     self.semi_transparency = ((val >> 5) & 3) as u8;
@@ -148,33 +173,45 @@ impl Gpu {
     self.rectangle_texture_y_flip = ((val >> 13) & 1) != 0;
   }
 
-  fn gp0_drawing_area_top_left(&mut self, val: u32) {
+  fn gp0_drawing_area_top_left(&mut self) {
+    let val = self.gp0_command[0];
     self.drawing_area_top = ((val >> 10) & 0x03FF) as u16;
     self.drawing_area_left = (val & 0x03FF) as u16;
   }
 
-  fn gp0_drawing_area_bottom_right(&mut self, val: u32) {
+  fn gp0_drawing_area_bottom_right(&mut self) {
+    let val = self.gp0_command[0];
     self.drawing_area_bottom = ((val >> 10) & 0x03FF) as u16;
     self.drawing_area_right = (val & 0x03FF) as u16;
   }
 
-  fn gp0_drawing_offset(&mut self, val: u32) {
+  fn gp0_drawing_offset(&mut self) {
+    let val = self.gp0_command[0];
     let x = (val & 0x07FF) as u16;
     let y = ((val >> 11) & 0x07FF) as u16;
     self.drawing_x_offset = ((x << 5) as i16) >> 5;
     self.drawing_y_offset = ((y << 5) as i16) >> 5;
   }
 
-  fn gp0_texture_window(&mut self, val: u32) {
+  fn gp0_texture_window(&mut self) {
+    let val = self.gp0_command[0];
     self.texture_window_x_mask = (val & 0x1F) as u8;
     self.texture_window_y_mask = ((val >> 5) & 0x1F) as u8;
     self.texture_window_x_offset = ((val >> 10) & 0x1F) as u8;
     self.texture_window_y_offset = ((val >> 15) & 0x1F) as u8;
   }
 
-  fn gp0_mask_bit_setting(&mut self, val: u32) {
+  fn gp0_mask_bit_setting(&mut self) {
+    let val = self.gp0_command[0];
     self.force_set_mask_bit = (val & 1) != 0;
     self.preserve_masked_pixels = (val & 2) != 0;
+  }
+
+  fn gp0_quad_mono_opaque(&mut self) {
+    println!("Draw quad");
+  }
+
+  fn gp0_clear_cache(&mut self) {
   }
 
   pub fn gp1(&mut self, val: u32) {
