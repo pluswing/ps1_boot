@@ -275,7 +275,7 @@ impl Interconnect {
         Direction::FromRam => {
           let src_word = self.ram.load32(cur_addr);
           match port {
-            Port::Gpu => println!("GPU data {:08X}", src_word),
+            Port::Gpu => self.gpu.gp0(src_word),
             _ => panic!("Unhandled DMA destination port {}", port as u8),
           }
         },

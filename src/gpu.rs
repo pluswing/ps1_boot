@@ -39,8 +39,9 @@ pub struct Gpu {
   display_line_end: u16,
 
   gp0_command: CommandBuffer,
-  gp0_command_remaining: u32,
+  gp0_words_remaining: u32,
   gp0_command_method: fn(&mut Gpu),
+  gp0_mode: Gp0Mode,
 }
 
 impl Gpu {
@@ -86,8 +87,9 @@ impl Gpu {
       display_line_end: 0,
 
       gp0_command: CommandBuffer::new(),
-      gp0_command_remaining: 0,
+      gp0_words_remaining: 0,
       gp0_command_method: Gpu::gp0_nop as fn(&mut Gpu),
+      gp0_mode: Gp0Mode::Command,
     }
   }
 
@@ -124,13 +126,19 @@ impl Gpu {
     r | dma_request << 25
   }
 
+  pub fn read(&self) -> u32 {
+    0
+  }
+
   pub fn gp0(&mut self, val: u32) {
-    if self.gp0_command_remaining == 0 {
+    if self.gp0_words_remaining == 0 {
       let opcode = (val >> 24) & 0xFF;
       let (len, method) = match opcode {
         0x00 => (1, Gpu::gp0_nop as fn(&mut Gpu)),
         0x01 => (1, Gpu::gp0_clear_cache as fn(&mut Gpu)),
         0x28 => (5, Gpu::gp0_quad_mono_opaque as fn(&mut Gpu)),
+        0xA0 => (3, Gpu::gp0_image_load as fn(&mut Gpu)),
+        0xC0 => (3, Gpu::gp0_image_store as fn(&mut Gpu)),
         0xE1 => (1, Gpu::gp0_draw_mode as fn(&mut Gpu)),
         0xE2 => (1, Gpu::gp0_texture_window as fn(&mut Gpu)),
         0xE3 => (1, Gpu::gp0_drawing_area_top_left as fn(&mut Gpu)),
@@ -139,15 +147,26 @@ impl Gpu {
         0xE6 => (1, Gpu::gp0_mask_bit_setting as fn(&mut Gpu)),
         _ => panic!("Unhandled GP0 command {:08X}", val)
       };
-      self.gp0_command_remaining = len;
+      self.gp0_words_remaining = len;
       self.gp0_command_method = method;
       self.gp0_command.clear();
     }
-    self.gp0_command.push_word(val);
-    self.gp0_command_remaining = self.gp0_command_remaining - 1;
-    if self.gp0_command_remaining == 0 {
-      (self.gp0_command_method)(self)
+    self.gp0_words_remaining = self.gp0_words_remaining - 1;
+
+    match self.gp0_mode {
+      Gp0Mode::Command => {
+        self.gp0_command.push_word(val);
+        if self.gp0_words_remaining == 0 {
+          (self.gp0_command_method)(self)
+        }
+      },
+      Gp0Mode::ImageLoad => {
+        if self.gp0_words_remaining == 0 {
+          self.gp0_mode = Gp0Mode::Command;
+        }
+      }
     }
+
   }
 
   fn gp0_nop(&mut self) {
@@ -214,10 +233,28 @@ impl Gpu {
   fn gp0_clear_cache(&mut self) {
   }
 
+  fn gp0_image_load(&mut self) {
+    let res = self.gp0_command[2];
+    let width = res & 0xFFFF;
+    let height = res >> 16;
+    let imgsize = width * height;
+    let imgsize = (imgsize + 1) & !1;
+    self.gp0_words_remaining = imgsize / 2;
+    self.gp0_mode = Gp0Mode::ImageLoad;
+  }
+
+  fn gp0_image_store(&mut self) {
+    let res = self.gp0_command[2];
+    let width = res & 0xFFFF;
+    let height = res >> 16;
+    println!("Unhandled image store: {}x{}", width, height);
+  }
+
   pub fn gp1(&mut self, val: u32) {
     let opcode = (val >> 24) & 0xFF;
     match opcode {
       0x00 => self.gp1_reset(val),
+      0x03 => self.gp1_display_enable(val),
       0x04 => self.gp1_dma_direction(val),
       0x05 => self.gp1_display_vram_start(val),
       0x06 => self.gp1_display_hirozontal_range(val),
@@ -323,8 +360,8 @@ impl Gpu {
     self.display_line_end = ((val >> 10) & 0x03FF) as u16;
   }
 
-  pub fn read(&self) -> u32 {
-    0
+  fn gp1_display_enable(&mut self, val: u32) {
+    self.display_disabled = val & 1 != 0;
   }
 }
 
@@ -413,4 +450,9 @@ impl ::std::ops::Index<usize> for CommandBuffer {
     }
     &self.buffer[index]
   }
+}
+
+enum Gp0Mode {
+  Command,
+  ImageLoad,
 }
