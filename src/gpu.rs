@@ -137,6 +137,9 @@ impl Gpu {
         0x00 => (1, Gpu::gp0_nop as fn(&mut Gpu)),
         0x01 => (1, Gpu::gp0_clear_cache as fn(&mut Gpu)),
         0x28 => (5, Gpu::gp0_quad_mono_opaque as fn(&mut Gpu)),
+        0x2C => (9, Gpu::gp0_quad_texture_blend_opaque as fn(&mut Gpu)),
+        0x30 => (6, Gpu::gp0_triangle_shaded_opaque as fn(&mut Gpu)),
+        0x38 => (8, Gpu::gp0_quad_shaded_opaque as fn(&mut Gpu)),
         0xA0 => (3, Gpu::gp0_image_load as fn(&mut Gpu)),
         0xC0 => (3, Gpu::gp0_image_store as fn(&mut Gpu)),
         0xE1 => (1, Gpu::gp0_draw_mode as fn(&mut Gpu)),
@@ -250,10 +253,24 @@ impl Gpu {
     println!("Unhandled image store: {}x{}", width, height);
   }
 
+  fn gp0_quad_shaded_opaque(&mut self) {
+    println!("Draw quad shaded");
+  }
+
+  fn gp0_triangle_shaded_opaque(&mut self) {
+    println!("Draw triangle shaded");
+  }
+
+  fn gp0_quad_texture_blend_opaque(&mut self) {
+    println!("Draw quad texture blending");
+  }
+
   pub fn gp1(&mut self, val: u32) {
     let opcode = (val >> 24) & 0xFF;
     match opcode {
       0x00 => self.gp1_reset(val),
+      0x01 => self.gp1_reset_command_buffer(val),
+      0x02 => self.gp1_acknowledge_irq(val),
       0x03 => self.gp1_display_enable(val),
       0x04 => self.gp1_dma_direction(val),
       0x05 => self.gp1_display_vram_start(val),
@@ -362,6 +379,17 @@ impl Gpu {
 
   fn gp1_display_enable(&mut self, val: u32) {
     self.display_disabled = val & 1 != 0;
+  }
+
+  fn gp1_acknowledge_irq(&mut self, _: u32) {
+    self.interrupt = false;
+  }
+
+  fn gp1_reset_command_buffer(&mut self, _: u32) {
+    self.gp0_command.clear();
+    self.gp0_words_remaining = 0;
+    self.gp0_mode = Gp0Mode::Command;
+    // XXX command FIFO
   }
 }
 

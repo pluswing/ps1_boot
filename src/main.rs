@@ -11,6 +11,7 @@ mod ram;
 mod dma;
 mod channel;
 mod gpu;
+mod renderer;
 
 fn main() {
   let bios = Bios::new(&Path::new("bios/BIOS.ROM")).unwrap();
