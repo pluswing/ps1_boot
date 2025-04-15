@@ -1,3 +1,5 @@
+use crate::renderer::Renderer;
+
 pub struct Gpu {
   page_base_x: u8,
   page_base_y: u8,
@@ -42,6 +44,8 @@ pub struct Gpu {
   gp0_words_remaining: u32,
   gp0_command_method: fn(&mut Gpu),
   gp0_mode: Gp0Mode,
+
+  renderer: Renderer,
 }
 
 impl Gpu {
@@ -90,6 +94,8 @@ impl Gpu {
       gp0_words_remaining: 0,
       gp0_command_method: Gpu::gp0_nop as fn(&mut Gpu),
       gp0_mode: Gp0Mode::Command,
+
+      renderer: Renderer::new(),
     }
   }
 
