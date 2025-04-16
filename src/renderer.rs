@@ -1,3 +1,5 @@
+use std::slice;
+
 use sdl2;
 use gl;
 
@@ -13,6 +15,7 @@ impl Renderer {
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
 
+    // TODO
     // sdl2::video::gl_set_attrbute(GLContextMajorVersion, 3);
     // sdl2::video::gl_set_attrbute(GLContextMinorVersion, 3);
 
@@ -33,6 +36,23 @@ impl Renderer {
 
     window.gl_swap_window();
 
+    // main.rsに持っていく。
+    let mut event_pump = sdl_context.event_pump().unwrap();
+    'main: loop {
+        for event in event_pump.poll_iter() {
+            match event {
+                sdl2::event::Event::Quit {..} => break 'main,
+                _ => {},
+            }
+        }
+
+        unsafe {
+            gl::Clear(gl::COLOR_BUFFER_BIT);
+        }
+
+        window.gl_swap_window();
+    }
+
     Self {
       sdl_context,
       video_subsystem,
@@ -40,5 +60,59 @@ impl Renderer {
       gl_context,
     }
 
+  }
+}
+
+#[derive(Copy, Clone, Default, Debug)]
+pub struct Position(pub GLshort, pub GLshort);
+
+impl Position {
+  pub fn from_gp0(val: u32) -> Self {
+    let x = val as i16;
+    let y = (val >> 16) as i16;
+
+    Self(x as GLshort, y as GLshort)
+  }
+}
+
+#[derive(Copy, Clone, Default, Debug)]
+pub struct Color(pub GLubyte, pub GLubyte, pub GLubyte);
+
+impl Color {
+  pub fn from_gp0(val: u32) -> Self {
+    let r = val as u8;
+    let g = (val >> 8) as u8;
+    let b = (val >> 16) as u8;
+    Self(r as GLubyte, g as GLubyte, b as GLubyte)
+  }
+}
+
+pub struct Buffer<T> {
+  object: GLunit,
+  map: *mut T,
+}
+
+impl <T: Copy * Default> Buffer<T> {
+  pub fn new() -> Self<T> {
+    let mut object = 0;
+    let mut memory;
+
+    unsafe {
+      gl::GenBuffers(1, &mut object);
+      gl::BindBuffer(gl::ARRAY_BUFFER, object);
+      let element_size = size_of::<T>() as GLsizeiptr;
+      let buffer_size = element_size * VERTEX_BUFFER_LEN as GLsizeipter;
+      let access = gl::MAP_WRITE_BIT | gl::MAP_PERSISTENT_BIT;
+      gl::BufferStorage(gl::ARRAY_BUFFER, buffer_size, ptr::null(), access);
+      memory = gl::MapBufferRange(gl::ARRAY_BUFFER, 0, buffer_size, access) as *mut T;
+      let s = slice::from_raw_parts_mut(memory, VERTEX_BUFFER_LEN as usize);
+      for x in s.iter_mut() {
+        *x = Default::default();
+      }
+    }
+    Self {
+      object,
+      map: memory,
+    }
   }
 }

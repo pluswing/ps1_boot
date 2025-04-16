@@ -1,4 +1,4 @@
-use crate::renderer::Renderer;
+use crate::renderer::{Color, Position, Renderer};
 
 pub struct Gpu {
   page_base_x: u8,
@@ -264,7 +264,17 @@ impl Gpu {
   }
 
   fn gp0_triangle_shaded_opaque(&mut self) {
-    println!("Draw triangle shaded");
+    let positions = [
+      Position::from_gp0(self.gp0_command[1]),
+      Position::from_gp0(self.gp0_command[3]),
+      Position::from_gp0(self.gp0_command[5]),
+    ];
+    let colors = [
+      Color::from_gp0(self.gp0_command[0]),
+      Color::from_gp0(self.gp0_command[2]),
+      Color::from_gp0(self.gp0_command[4]),
+    ];
+    self.renderer.push_triangle(positions, colors);
   }
 
   fn gp0_quad_texture_blend_opaque(&mut self) {
