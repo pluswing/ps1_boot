@@ -1,7 +1,9 @@
-use std::slice;
+use std::{mem::size_of, slice};
 
 use sdl2;
 use gl;
+use gl::types::{GLshort, GLubyte, GLuint, GLsizeiptr};
+use std::ptr;
 
 pub struct Renderer {
   sdl_context: sdl2::Sdl,
@@ -59,7 +61,10 @@ impl Renderer {
       window,
       gl_context,
     }
+  }
 
+  pub fn push_triangle(&mut self, positions: &[Position], colors: &[Color]) {
+    // TODO
   }
 }
 
@@ -88,12 +93,12 @@ impl Color {
 }
 
 pub struct Buffer<T> {
-  object: GLunit,
+  object: GLuint,
   map: *mut T,
 }
 
-impl <T: Copy * Default> Buffer<T> {
-  pub fn new() -> Self<T> {
+impl <T: Copy + Default> Buffer<T> {
+  pub fn new() -> Buffer<T> {
     let mut object = 0;
     let mut memory;
 
@@ -101,7 +106,7 @@ impl <T: Copy * Default> Buffer<T> {
       gl::GenBuffers(1, &mut object);
       gl::BindBuffer(gl::ARRAY_BUFFER, object);
       let element_size = size_of::<T>() as GLsizeiptr;
-      let buffer_size = element_size * VERTEX_BUFFER_LEN as GLsizeipter;
+      let buffer_size = element_size * VERTEX_BUFFER_LEN as GLsizeiptr;
       let access = gl::MAP_WRITE_BIT | gl::MAP_PERSISTENT_BIT;
       gl::BufferStorage(gl::ARRAY_BUFFER, buffer_size, ptr::null(), access);
       memory = gl::MapBufferRange(gl::ARRAY_BUFFER, 0, buffer_size, access) as *mut T;
@@ -115,4 +120,27 @@ impl <T: Copy * Default> Buffer<T> {
       map: memory,
     }
   }
+
+  pub fn set(&mut self, index: u32, val: T) {
+    if index >= VERTEX_BUFFER_LEN {
+      panic!("buffer overflow!");
+    }
+
+    unsafe {
+      let p = self.map.offset(index as isize);
+      *p = val;
+    }
+  }
 }
+
+impl<T> Drop for Buffer<T> {
+  fn drop(&mut self) {
+    unsafe {
+      gl::BindBuffer(gl::ARRAY_BUFFER, self.object);
+      gl::UnmapBuffer(gl::ARRAY_BUFFER);
+      gl::DeleteBuffers(1, &self.object);
+    }
+  }
+}
+
+const VERTEX_BUFFER_LEN: u32 = 64 * 1024;
