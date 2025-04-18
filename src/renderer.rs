@@ -10,6 +10,14 @@ pub struct Renderer {
   video_subsystem: sdl2::VideoSubsystem,
   window: sdl2::video::Window,
   gl_context: sdl2::video::GLContext,
+
+  vertex_shader: GLuint,
+  fragment_shader: GLuint,
+  program: GLuint,
+  vertex_array_object: GLuint,
+  positions: Buffer<Position>,
+  colors: Buffer<Color>,
+  nvertices: u32,
 }
 
 impl Renderer {
@@ -55,11 +63,52 @@ impl Renderer {
         window.gl_swap_window();
     }
 
+    let vs_src = include_str!("shader/vertex.glsl");
+    let fs_src = include_str!("shader/fragment.glsl");
+
+    let vertex_shader = compile_shader(vs_src, gl::VERTEX_SHADER);
+    let fragment_shader = compile_shader(fs_src, gl::FRAGMENT_SHADER);
+
+    let program = link_program(&[vertex_shader, fragment_shader]);
+
+    unsafe {
+      gl::UseProgram(program);
+    }
+
+    let mut vao = 0;
+    unsafe {
+      gl::GenVertexArrays(1, &mut vao);
+      gl::BindVertexArray(vao);
+    }
+
+    let positions = Buffer::new();
+
+    unsafe {
+      let index = find_program_attrib(program, "vertex_position");
+      gl::EnableVertexAttribArray(index);
+      gl::VertexAttribIPointer(index, 2, gl::SHORT, 0, ptr::null());
+    }
+
+    let colors = Buffer::new();
+
+    unsafe {
+      let index = find_program_attrib(program, "vertex_color");
+      gl::EnableVertexAttribArray(index);
+      gl::VertexAttribIPointer(index, 3, gl::UNSIGNED_BYTE, 0, ptr::null());
+    }
+
     Self {
       sdl_context,
       video_subsystem,
       window,
       gl_context,
+      vertex_shader,
+      fragment_shader,
+      program,
+      vertex_array_object: vao,
+      positions,
+      colors,
+      nvertices: 0,
     }
   }
 
