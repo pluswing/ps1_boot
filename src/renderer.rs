@@ -1,9 +1,53 @@
+use std::ffi::CString;
 use std::{mem::size_of, slice};
 
 use sdl2;
 use gl;
-use gl::types::{GLshort, GLubyte, GLuint, GLsizeiptr};
+use gl::types::{GLshort, GLubyte, GLuint, GLsizeiptr, GLint, GLenum};
 use std::ptr;
+
+pub fn compile_shader(src: &str, shader_type: GLenum) -> GLuint {
+  let shader;
+  unsafe {
+    shader = gl::CreateShader(shader_type);
+    let c_str = CString::new(src.as_bytes()).unwrap();
+    gl::ShaderSource(shader, 1, &c_str.as_ptr(), ptr::null());
+    gl::CompileShader(shader);
+    let mut status = gl::FALSE as GLint;
+    gl::GetShaderiv(shader, gl::COMPILE_STATUS, &mut status);
+    if status != (gl::TRUE as GLint) {
+      panic!("Shader compilation failed!");
+    }
+  }
+  shader
+}
+
+pub fn link_program(shaders: &[GLuint]) -> GLuint {
+  let program;
+
+  unsafe {
+    program = gl::CreateProgram();
+    for &shader in shaders {
+      gl::AttachShader(program, shader);
+    }
+    gl::LinkProgram(program);
+    let mut status = gl::FALSE as GLint;
+    gl::GetProgramiv(program, gl::LINK_STATUS, &mut status);
+    if status != (gl::TRUE as GLint) {
+      panic!("OpenGL program linking failed!");
+    }
+  }
+  program
+}
+
+pub fn find_program_attrib(program: GLuint, attr: &str) -> GLuint {
+  let cstr = CString::new(attr).unwrap().as_ptr();
+  let index = unsafe { gl::GetAttribLocation(program, cstr) };
+  if index < 0 {
+    panic!("Attribure \"{:?}\" not found int program", attr);
+  }
+  index as GLuint
+}
 
 pub struct Renderer {
   sdl_context: sdl2::Sdl,
@@ -112,8 +156,27 @@ impl Renderer {
     }
   }
 
-  pub fn push_triangle(&mut self, positions: &[Position], colors: &[Color]) {
-    // TODO
+  pub fn push_triangle(&mut self, positions: [Position; 3], colors: [Color; 3]) {
+    if self.nvertices + 3 > VERTEX_BUFFER_LEN {
+      println!("Vertex attrivute buffers full, forcing draw");
+      self.draw();
+    }
+    for i in 0..3 {
+      self.positions.set(self.nvertices, positions[i]);
+      self.colors.set(self.nvertices,colors[i]);
+      self.nvertices = self.nvertices + 1;
+    }
+  }
+}
+
+impl Drop for Renderer {
+  fn drop(&mut self) {
+      unsafe {
+        gl::DeleteVertexArrays(1, &self.vertex_array_object);
+        gl::DeleteShader(self.vertex_shader);
+        gl::DeleteShader(self.fragment_shader);
+        gl::DeleteProgram(self.program);
+      }
   }
 }
 
