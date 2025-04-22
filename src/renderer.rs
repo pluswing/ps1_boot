@@ -3,7 +3,7 @@ use std::{mem::size_of, slice};
 
 use sdl2;
 use gl;
-use gl::types::{GLshort, GLubyte, GLuint, GLsizeiptr, GLint, GLenum};
+use gl::types::{GLshort, GLubyte, GLuint, GLsizeiptr, GLint, GLenum, GLsizei};
 use std::ptr;
 
 pub fn compile_shader(src: &str, shader_type: GLenum) -> GLuint {
@@ -41,8 +41,10 @@ pub fn link_program(shaders: &[GLuint]) -> GLuint {
 }
 
 pub fn find_program_attrib(program: GLuint, attr: &str) -> GLuint {
-  let cstr = CString::new(attr).unwrap().as_ptr();
-  let index = unsafe { gl::GetAttribLocation(program, cstr) };
+  let cstr = CString::new(attr).unwrap();
+  let index = unsafe {
+    gl::GetAttribLocation(program, cstr.as_ptr())
+  };
   if index < 0 {
     panic!("Attribure \"{:?}\" not found int program", attr);
   }
@@ -69,9 +71,9 @@ impl Renderer {
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
 
-    // TODO
-    // sdl2::video::gl_set_attrbute(GLContextMajorVersion, 3);
-    // sdl2::video::gl_set_attrbute(GLContextMinorVersion, 3);
+    let gl_attr = video_subsystem.gl_attr();
+    gl_attr.set_context_profile(sdl2::video::GLProfile::Core);
+    gl_attr.set_context_version(3, 3);
 
     let window = video_subsystem.window("PSX", 1024, 512)
         .opengl()
@@ -89,23 +91,6 @@ impl Renderer {
     }
 
     window.gl_swap_window();
-
-    // main.rsに持っていく。
-    let mut event_pump = sdl_context.event_pump().unwrap();
-    'main: loop {
-        for event in event_pump.poll_iter() {
-            match event {
-                sdl2::event::Event::Quit {..} => break 'main,
-                _ => {},
-            }
-        }
-
-        unsafe {
-            gl::Clear(gl::COLOR_BUFFER_BIT);
-        }
-
-        window.gl_swap_window();
-    }
 
     let vs_src = include_str!("shader/vertex.glsl");
     let fs_src = include_str!("shader/fragment.glsl");
@@ -125,14 +110,19 @@ impl Renderer {
       gl::BindVertexArray(vao);
     }
 
+    println!("init args positions");
     let positions = Buffer::new();
 
     unsafe {
+      println!("find");
       let index = find_program_attrib(program, "vertex_position");
+      println!("found");
       gl::EnableVertexAttribArray(index);
+      println!("en");
       gl::VertexAttribIPointer(index, 2, gl::SHORT, 0, ptr::null());
     }
 
+    println!("init args color");
     let colors = Buffer::new();
 
     unsafe {
@@ -140,6 +130,7 @@ impl Renderer {
       gl::EnableVertexAttribArray(index);
       gl::VertexAttribIPointer(index, 3, gl::UNSIGNED_BYTE, 0, ptr::null());
     }
+    println!("done renderer init");
 
     Self {
       sdl_context,
@@ -166,6 +157,42 @@ impl Renderer {
       self.colors.set(self.nvertices,colors[i]);
       self.nvertices = self.nvertices + 1;
     }
+  }
+
+  pub fn draw(&mut self) {
+    unsafe {
+      gl::MemoryBarrier(gl::CLIENT_MAPPED_BUFFER_BARRIER_BIT);
+      gl::DrawArrays(gl::TRIANGLES, 0, self.nvertices as GLsizei);
+    }
+
+    unsafe {
+      let sync = gl::FenceSync(gl::SYNC_GPU_COMMANDS_COMPLETE, 0);
+      loop {
+        let r = gl::ClientWaitSync(
+          sync,
+          gl::SYNC_FLUSH_COMMANDS_BIT,
+          10000000
+        );
+        if r == gl::ALREADY_SIGNALED || r == gl::CONDITION_SATISFIED {
+          break;
+        }
+      }
+    }
+    self.nvertices = 0;
+  }
+
+  pub fn display(&mut self) {
+    self.draw();
+
+    let mut event_pump = self.sdl_context.event_pump().unwrap();
+    for event in event_pump.poll_iter() {
+      match event {
+        sdl2::event::Event::Quit {..} => panic!("exit!"),
+        _ => {},
+      }
+    }
+
+    self.window.gl_swap_window();
   }
 }
 
@@ -214,15 +241,21 @@ impl <T: Copy + Default> Buffer<T> {
     let mut object = 0;
     let mut memory;
 
+    println!("buffer new");
     unsafe {
       gl::GenBuffers(1, &mut object);
       gl::BindBuffer(gl::ARRAY_BUFFER, object);
+      println!("element size");
       let element_size = size_of::<T>() as GLsizeiptr;
       let buffer_size = element_size * VERTEX_BUFFER_LEN as GLsizeiptr;
       let access = gl::MAP_WRITE_BIT | gl::MAP_PERSISTENT_BIT;
+      println!("storage");
       gl::BufferStorage(gl::ARRAY_BUFFER, buffer_size, ptr::null(), access);
+      println!("map");
       memory = gl::MapBufferRange(gl::ARRAY_BUFFER, 0, buffer_size, access) as *mut T;
+      println!("from");
       let s = slice::from_raw_parts_mut(memory, VERTEX_BUFFER_LEN as usize);
+      println!("init");
       for x in s.iter_mut() {
         *x = Default::default();
       }

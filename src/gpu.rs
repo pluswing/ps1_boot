@@ -219,6 +219,8 @@ impl Gpu {
     let y = ((val >> 11) & 0x07FF) as u16;
     self.drawing_x_offset = ((x << 5) as i16) >> 5;
     self.drawing_y_offset = ((y << 5) as i16) >> 5;
+
+    self.renderer.display();
   }
 
   fn gp0_texture_window(&mut self) {
