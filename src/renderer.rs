@@ -111,7 +111,7 @@ impl Renderer {
     }
 
     println!("init args positions");
-    let positions = Buffer::new();
+    let positions = Buffer::<Position>::new();
 
     unsafe {
       println!("find");
@@ -123,7 +123,7 @@ impl Renderer {
     }
 
     println!("init args color");
-    let colors = Buffer::new();
+    let colors = Buffer::<Color>::new();
 
     unsafe {
       let index = find_program_attrib(program, "vertex_color");
@@ -251,6 +251,7 @@ impl <T: Copy + Default> Buffer<T> {
       let access = gl::MAP_WRITE_BIT | gl::MAP_PERSISTENT_BIT;
       println!("storage");
       gl::BufferStorage(gl::ARRAY_BUFFER, buffer_size, ptr::null(), access);
+
       println!("map");
       memory = gl::MapBufferRange(gl::ARRAY_BUFFER, 0, buffer_size, access) as *mut T;
       println!("from");
