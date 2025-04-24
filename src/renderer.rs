@@ -86,6 +86,7 @@ impl Renderer {
     let _gl = gl::load_with(|s| video_subsystem.gl_get_proc_address(s) as *const std::os::raw::c_void);
 
     unsafe {
+      // gl::Viewport(0, 0, 1024, 512);
       gl::ClearColor(0., 0., 0., 1.0);
       gl::Clear(gl::COLOR_BUFFER_BIT);
     }
@@ -152,6 +153,7 @@ impl Renderer {
       println!("Vertex attrivute buffers full, forcing draw");
       self.draw();
     }
+    println!("push triangle");
     for i in 0..3 {
       self.positions.set(self.nvertices, positions[i]);
       self.colors.set(self.nvertices,colors[i]);
@@ -161,7 +163,9 @@ impl Renderer {
 
   pub fn draw(&mut self) {
     unsafe {
-      gl::MemoryBarrier(gl::CLIENT_MAPPED_BUFFER_BARRIER_BIT);
+      println!("barrier");
+      // gl::MemoryBarrier(gl::CLIENT_MAPPED_BUFFER_BARRIER_BIT);
+      println!("draw arrays {}", self.nvertices);
       gl::DrawArrays(gl::TRIANGLES, 0, self.nvertices as GLsizei);
     }
 
@@ -250,7 +254,7 @@ impl <T: Copy + Default> Buffer<T> {
       let buffer_size = element_size * VERTEX_BUFFER_LEN as GLsizeiptr;
       let access = gl::MAP_WRITE_BIT | gl::MAP_PERSISTENT_BIT;
       println!("storage");
-      gl::BufferStorage(gl::ARRAY_BUFFER, buffer_size, ptr::null(), access);
+      gl::BufferData(gl::ARRAY_BUFFER, buffer_size, ptr::null(), access);
 
       println!("map");
       memory = gl::MapBufferRange(gl::ARRAY_BUFFER, 0, buffer_size, access) as *mut T;
@@ -273,8 +277,18 @@ impl <T: Copy + Default> Buffer<T> {
     }
 
     unsafe {
-      let p = self.map.offset(index as isize);
-      *p = val;
+      // let p = self.map.offset(index as isize);
+      // *p = val;
+
+      let s = slice::from_raw_parts_mut(self.map, VERTEX_BUFFER_LEN as usize);
+      let mut i = 0;
+      for x in s.iter_mut() {
+        if i == index {
+          *x = val;
+          break;
+        }
+        i = i + 1;
+      }
     }
   }
 }
