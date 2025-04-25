@@ -60,9 +60,8 @@ pub struct Renderer {
   vertex_shader: GLuint,
   fragment_shader: GLuint,
   program: GLuint,
-  vertex_array_object: GLuint,
-  positions: Buffer<Position>,
-  colors: Buffer<Color>,
+  positions: Vec<Position>,
+  colors: Vec<Color>,
   nvertices: u32,
 }
 
@@ -101,37 +100,8 @@ impl Renderer {
 
     let program = link_program(&[vertex_shader, fragment_shader]);
 
-    unsafe {
-      gl::UseProgram(program);
-    }
-
-    let mut vao = 0;
-    unsafe {
-      gl::GenVertexArrays(1, &mut vao);
-      gl::BindVertexArray(vao);
-    }
-
-    println!("init args positions");
-    let positions = Buffer::<Position>::new();
-
-    unsafe {
-      println!("find");
-      let index = find_program_attrib(program, "vertex_position");
-      println!("found");
-      gl::EnableVertexAttribArray(index);
-      println!("en");
-      gl::VertexAttribIPointer(index, 2, gl::SHORT, 0, ptr::null());
-    }
-
-    println!("init args color");
-    let colors = Buffer::<Color>::new();
-
-    unsafe {
-      let index = find_program_attrib(program, "vertex_color");
-      gl::EnableVertexAttribArray(index);
-      gl::VertexAttribIPointer(index, 3, gl::UNSIGNED_BYTE, 0, ptr::null());
-    }
-    println!("done renderer init");
+    let positions = vec![Position(0, 0); 128];
+    let colors = vec![Color(0, 0, 0); 128];
 
     Self {
       sdl_context,
@@ -141,7 +111,6 @@ impl Renderer {
       vertex_shader,
       fragment_shader,
       program,
-      vertex_array_object: vao,
       positions,
       colors,
       nvertices: 0,
@@ -153,19 +122,71 @@ impl Renderer {
       println!("Vertex attrivute buffers full, forcing draw");
       self.draw();
     }
-    println!("push triangle");
     for i in 0..3 {
-      self.positions.set(self.nvertices, positions[i]);
-      self.colors.set(self.nvertices,colors[i]);
+      self.positions[self.nvertices as usize] = positions[i];
+      self.colors[self.nvertices as usize] = colors[i];
       self.nvertices = self.nvertices + 1;
     }
   }
 
   pub fn draw(&mut self) {
+    let mut position_vbo: gl::types::GLuint = 0;
     unsafe {
-      println!("barrier");
-      // gl::MemoryBarrier(gl::CLIENT_MAPPED_BUFFER_BARRIER_BIT);
-      println!("draw arrays {}", self.nvertices);
+        gl::GenBuffers(1, &mut position_vbo);
+        gl::BindBuffer(gl::ARRAY_BUFFER, position_vbo);
+        gl::BufferData(
+            gl::ARRAY_BUFFER,                                                       // target
+            (self.nvertices as usize * std::mem::size_of::<Position>()) as gl::types::GLsizeiptr, // size of data in bytes
+            self.positions.as_ptr() as *const gl::types::GLvoid, // pointer to data
+            gl::STATIC_DRAW,                               // usage
+        );
+        gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+    }
+
+    let mut color_vbo: gl::types::GLuint = 0;
+    unsafe {
+        gl::GenBuffers(1, &mut color_vbo);
+        gl::BindBuffer(gl::ARRAY_BUFFER, color_vbo);
+        gl::BufferData(
+            gl::ARRAY_BUFFER,                                                       // target
+            (self.nvertices as usize * std::mem::size_of::<Color>()) as gl::types::GLsizeiptr, // size of data in bytes
+            self.colors.as_ptr() as *const gl::types::GLvoid, // pointer to data
+            gl::STATIC_DRAW,                               // usage
+        );
+        gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+    }
+
+    let mut vao = 0;
+    unsafe {
+      gl::GenVertexArrays(1, &mut vao);
+      gl::BindVertexArray(vao);
+    }
+
+    unsafe {
+      gl::BindBuffer(gl::ARRAY_BUFFER, position_vbo);
+      let index = find_program_attrib(self.program, "vertex_position");
+      gl::EnableVertexAttribArray(index);
+      gl::VertexAttribIPointer(index, 2, gl::SHORT, 0, ptr::null());
+    }
+
+    unsafe {
+      gl::BindBuffer(gl::ARRAY_BUFFER, color_vbo);
+      let index = find_program_attrib(self.program, "vertex_color");
+      gl::EnableVertexAttribArray(index);
+      gl::VertexAttribIPointer(index, 3, gl::UNSIGNED_BYTE, 0, ptr::null());
+    }
+
+    unsafe {
+      gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+      gl::BindVertexArray(0);
+    }
+
+    unsafe {
+      gl::UseProgram(self.program);
+    }
+
+    unsafe {
+      gl::BindVertexArray(vao);
       gl::DrawArrays(gl::TRIANGLES, 0, self.nvertices as GLsizei);
     }
 
@@ -203,7 +224,6 @@ impl Renderer {
 impl Drop for Renderer {
   fn drop(&mut self) {
       unsafe {
-        gl::DeleteVertexArrays(1, &self.vertex_array_object);
         gl::DeleteShader(self.vertex_shader);
         gl::DeleteShader(self.fragment_shader);
         gl::DeleteProgram(self.program);
@@ -232,74 +252,6 @@ impl Color {
     let g = (val >> 8) as u8;
     let b = (val >> 16) as u8;
     Self(r as GLubyte, g as GLubyte, b as GLubyte)
-  }
-}
-
-pub struct Buffer<T> {
-  object: GLuint,
-  map: *mut T,
-}
-
-impl <T: Copy + Default> Buffer<T> {
-  pub fn new() -> Buffer<T> {
-    let mut object = 0;
-    let mut memory;
-
-    println!("buffer new");
-    unsafe {
-      gl::GenBuffers(1, &mut object);
-      gl::BindBuffer(gl::ARRAY_BUFFER, object);
-      println!("element size");
-      let element_size = size_of::<T>() as GLsizeiptr;
-      let buffer_size = element_size * VERTEX_BUFFER_LEN as GLsizeiptr;
-      let access = gl::MAP_WRITE_BIT | gl::MAP_PERSISTENT_BIT;
-      println!("storage");
-      gl::BufferData(gl::ARRAY_BUFFER, buffer_size, ptr::null(), access);
-
-      println!("map");
-      memory = gl::MapBufferRange(gl::ARRAY_BUFFER, 0, buffer_size, access) as *mut T;
-      println!("from");
-      let s = slice::from_raw_parts_mut(memory, VERTEX_BUFFER_LEN as usize);
-      println!("init");
-      for x in s.iter_mut() {
-        *x = Default::default();
-      }
-    }
-    Self {
-      object,
-      map: memory,
-    }
-  }
-
-  pub fn set(&mut self, index: u32, val: T) {
-    if index >= VERTEX_BUFFER_LEN {
-      panic!("buffer overflow!");
-    }
-
-    unsafe {
-      // let p = self.map.offset(index as isize);
-      // *p = val;
-
-      let s = slice::from_raw_parts_mut(self.map, VERTEX_BUFFER_LEN as usize);
-      let mut i = 0;
-      for x in s.iter_mut() {
-        if i == index {
-          *x = val;
-          break;
-        }
-        i = i + 1;
-      }
-    }
-  }
-}
-
-impl<T> Drop for Buffer<T> {
-  fn drop(&mut self) {
-    unsafe {
-      gl::BindBuffer(gl::ARRAY_BUFFER, self.object);
-      gl::UnmapBuffer(gl::ARRAY_BUFFER);
-      gl::DeleteBuffers(1, &self.object);
-    }
   }
 }
 
