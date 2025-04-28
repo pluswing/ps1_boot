@@ -1,9 +1,8 @@
 use std::ffi::CString;
-use std::{mem::size_of, slice};
 
 use sdl2;
 use gl;
-use gl::types::{GLshort, GLubyte, GLuint, GLsizeiptr, GLint, GLenum, GLsizei};
+use gl::types::{GLshort, GLubyte, GLuint, GLint, GLenum, GLsizei};
 use std::ptr;
 
 pub fn compile_shader(src: &str, shader_type: GLenum) -> GLuint {
@@ -51,6 +50,44 @@ pub fn find_program_attrib(program: GLuint, attr: &str) -> GLuint {
   index as GLuint
 }
 
+/*
+pub fn check_for_errors() {
+  let mut fatal = false;
+  loop {
+    let mut buffer = vec![0; 4096];
+
+    let mut severity = 0;
+    let mut source = 0;
+    let mut message_size = 0;
+    let mut mtype = 0;
+    let mut id = 0;
+
+    let count = unsafe {
+      gl::GetDebugMessageLog(1, buffer.len() as GLsizei, &mut source, &mut mtype, &mut id, &mut severity, &mut message_size, buffer.as_mut_ptr() as * mut GLchar)
+    };
+    if count == 0 {
+      break;
+    }
+
+    buffer.truncate(message_size as usize);
+    let message = match str::from_utf8(&buffer) {
+      Ok(m) => m,
+      Err(e) => panic!("Go invalid message: {}", e)
+    };
+    let source = DebugSource::from_raw(source);
+    let sevirity = DebugSrverity::from_raw(severity);
+    let mtype = DebugType::from_raw(mtype);
+
+    if severity.is_fatal() {
+      fatal = true;
+    }
+  }
+  if fatal {
+    panic!("Fatal OpenGL error");
+  }
+}
+*/
+
 pub struct Renderer {
   sdl_context: sdl2::Sdl,
   video_subsystem: sdl2::VideoSubsystem,
@@ -73,6 +110,7 @@ impl Renderer {
     let gl_attr = video_subsystem.gl_attr();
     gl_attr.set_context_profile(sdl2::video::GLProfile::Core);
     gl_attr.set_context_version(3, 3);
+    gl_attr.set_context_flags().debug().set();
 
     let window = video_subsystem.window("PSX", 1024, 512)
         .opengl()
@@ -124,6 +162,24 @@ impl Renderer {
     }
     for i in 0..3 {
       self.positions[self.nvertices as usize] = positions[i];
+      self.colors[self.nvertices as usize] = colors[i];
+      self.nvertices = self.nvertices + 1;
+    }
+  }
+
+  pub fn push_quad(&mut self, positions: [Position; 4], colors: [Color; 4]) {
+    if self.nvertices + 6 > VERTEX_BUFFER_LEN {
+      self.draw();
+    }
+
+    for i in 0..3 {
+      self.positions.set(self.nvertices, positions[i])
+      self.colors[self.nvertices as usize] = colors[i];
+      self.nvertices = self.nvertices + 1;
+    }
+
+    for i in 1..3 {
+      self.positions.set(self.nvertices, positions[i])
       self.colors[self.nvertices as usize] = colors[i];
       self.nvertices = self.nvertices + 1;
     }
