@@ -238,7 +238,14 @@ impl Gpu {
   }
 
   fn gp0_quad_mono_opaque(&mut self) {
-    println!("Draw quad");
+    let positions = [
+      Position::from_gp0(self.gp0_command[1]),
+      Position::from_gp0(self.gp0_command[2]),
+      Position::from_gp0(self.gp0_command[3]),
+      Position::from_gp0(self.gp0_command[4]),
+    ];
+    let colors = [ Color::from_gp0(self.gp0_command[0]); 4];
+    self.renderer.push_quad(positions, colors);
   }
 
   fn gp0_clear_cache(&mut self) {
@@ -262,7 +269,19 @@ impl Gpu {
   }
 
   fn gp0_quad_shaded_opaque(&mut self) {
-    println!("Draw quad shaded");
+    let positions = [
+      Position::from_gp0(self.gp0_command[1]),
+      Position::from_gp0(self.gp0_command[3]),
+      Position::from_gp0(self.gp0_command[5]),
+      Position::from_gp0(self.gp0_command[7]),
+    ];
+    let colors = [
+      Color::from_gp0(self.gp0_command[0]),
+      Color::from_gp0(self.gp0_command[2]),
+      Color::from_gp0(self.gp0_command[4]),
+      Color::from_gp0(self.gp0_command[6]),
+    ];
+    self.renderer.push_quad(positions, colors);
   }
 
   fn gp0_triangle_shaded_opaque(&mut self) {
@@ -280,7 +299,16 @@ impl Gpu {
   }
 
   fn gp0_quad_texture_blend_opaque(&mut self) {
-    println!("Draw quad texture blending");
+    let positions = [
+      Position::from_gp0(self.gp0_command[1]),
+      Position::from_gp0(self.gp0_command[3]),
+      Position::from_gp0(self.gp0_command[5]),
+      Position::from_gp0(self.gp0_command[7]),
+    ];
+    let colors = [
+      Color(0x80, 0x00, 0x00); 4
+    ];
+    self.renderer.push_quad(positions, colors);
   }
 
   pub fn gp1(&mut self, val: u32) {

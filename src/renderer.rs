@@ -100,6 +100,8 @@ pub struct Renderer {
   positions: Vec<Position>,
   colors: Vec<Color>,
   nvertices: u32,
+
+  uniform_offset: GLint,
 }
 
 impl Renderer {
@@ -138,8 +140,13 @@ impl Renderer {
 
     let program = link_program(&[vertex_shader, fragment_shader]);
 
-    let positions = vec![Position(0, 0); 128];
-    let colors = vec![Color(0, 0, 0); 128];
+    let positions = vec![Position(0, 0); VERTEX_BUFFER_LEN as usize];
+    let colors = vec![Color(0, 0, 0); VERTEX_BUFFER_LEN as usize];
+
+    let uniform_offset = find_program_uniform(program, "offset");
+    unsafe {
+      gl::Uniform2i(uniform_offset, 0, 0);
+    }
 
     Self {
       sdl_context,
@@ -152,6 +159,7 @@ impl Renderer {
       positions,
       colors,
       nvertices: 0,
+      uniform_offset,
     }
   }
 
@@ -173,13 +181,13 @@ impl Renderer {
     }
 
     for i in 0..3 {
-      self.positions.set(self.nvertices, positions[i])
+      self.positions[self.nvertices as usize] = positions[i];
       self.colors[self.nvertices as usize] = colors[i];
       self.nvertices = self.nvertices + 1;
     }
 
-    for i in 1..3 {
-      self.positions.set(self.nvertices, positions[i])
+    for i in 1..4 {
+      self.positions[self.nvertices as usize] = positions[i];
       self.colors[self.nvertices as usize] = colors[i];
       self.nvertices = self.nvertices + 1;
     }
