@@ -45,9 +45,20 @@ pub fn find_program_attrib(program: GLuint, attr: &str) -> GLuint {
     gl::GetAttribLocation(program, cstr.as_ptr())
   };
   if index < 0 {
-    panic!("Attribure \"{:?}\" not found int program", attr);
+    panic!("Attribure \"{:?}\" not found in program", attr);
   }
   index as GLuint
+}
+
+pub fn find_program_uniform(program: GLuint, uniform: &str) -> GLint {
+  let cstr = CString::new(uniform).unwrap();
+  let index = unsafe {
+    gl::GetUniformLocation(program, cstr.as_ptr())
+  };
+  if index < 0 {
+    panic!("Uniform \"{:?}\" not found in program", uniform);
+  }
+  index as GLint
 }
 
 /*
@@ -268,6 +279,13 @@ impl Renderer {
       }
     }
     self.nvertices = 0;
+  }
+
+  pub fn set_draw_offset(&mut self, x: i16, y: i16) {
+    self.draw();
+    unsafe {
+      gl::Uniform2i(self.uniform_offset, x as GLint, y as GLint);
+    }
   }
 
   pub fn display(&mut self) {
