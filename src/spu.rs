@@ -1,6 +1,8 @@
 use std::cmp;
 
-fn decode_adpcm_block(block: &[u8; 16], decoded: &mut [i16; 28], old_sample: &mut i16, older_sample: &mut i16) {
+use sdl2::audio::{AudioQueue, AudioSpecDesired};
+
+fn decode_adpcm_block(block: &[u8], decoded: &mut [i16; 28], old_sample: &mut i16, older_sample: &mut i16) {
 
   let shift = block[0] & 0x0F;
   let shift = if shift > 12 { 9 } else { shift };
@@ -35,6 +37,31 @@ fn decode_adpcm_block(block: &[u8; 16], decoded: &mut [i16; 28], old_sample: &mu
   }
 }
 
+pub struct Spu {
+  voices: [Voice; 24],
+  device: AudioQueue<i16>,
+}
+
+impl Spu {
+  pub fn new(sdl_context: sdl2::Sdl) -> Self {
+    let audio_subsystem = sdl_context.audio().unwrap();
+    let desired_spec = AudioSpecDesired {
+      freq: Some(44100),
+      channels: Some(2),
+      samples: None,
+    };
+    let device: AudioQueue<i16> = audio_subsystem
+        .open_queue::<i16, _>(None, &desired_spec)
+        .unwrap();
+    device.resume();
+    Self {
+      voices: [Voice::new(); 24],
+      device,
+    }
+  }
+}
+
+#[derive(Copy, Clone, Default, Debug)]
 struct Voice {
   start_address: u32,
   repeat_address: u32,
@@ -49,6 +76,20 @@ struct Voice {
 }
 
 impl Voice {
+  fn new () -> Self {
+    Self {
+      start_address: 0,
+      repeat_address: 0,
+      current_address: 0,
+      pitch_counter: 0,
+      decode_buffer: [0; 28],
+      envelope: AdsrEnvelope::new(),
+      sample_rete: 0,
+      current_buffer_idx: 0,
+      current_sample: 0,
+    }
+  }
+
   fn clock(&mut self, sound_ram: &[u8]) {
     let pitch_counter_step = cmp::min(0x4000, self.sample_rete);
     self.pitch_counter = self.pitch_counter + pitch_counter_step;
@@ -75,11 +116,13 @@ impl Voice {
 
   fn decode_next_block(&mut self, sound_ram: &[u8]) {
     let block = &sound_ram[self.current_address as usize..(self.current_address + 16) as usize];
+    let mut old_sample = self.decode_buffer[self.decode_buffer.len() - 1];
+    let mut older_sample = self.decode_buffer[self.decode_buffer.len() - 2];
     decode_adpcm_block(
       block,
       &mut self.decode_buffer,
-      &mut self.decode_buffer[self.decode_buffer.len() - 1],
-      &mut self.decode_buffer[self.decode_buffer.len() - 2]);
+      &mut old_sample,
+      &mut older_sample);
 
       let loop_end = block[1] & (1 << 0) != 0;
       let loop_repeat = block[1] & (1 << 1) != 0;
@@ -102,6 +145,7 @@ impl Voice {
   }
 }
 
+#[derive(Copy, Clone, Default, Debug)]
 struct AdsrEnvelope {
   volume: u32,
 }

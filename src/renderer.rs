@@ -100,7 +100,6 @@ pub fn check_for_errors() {
 */
 
 pub struct Renderer {
-  sdl_context: sdl2::Sdl,
   video_subsystem: sdl2::VideoSubsystem,
   window: sdl2::video::Window,
   gl_context: sdl2::video::GLContext,
@@ -116,8 +115,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-  pub fn new() -> Self {
-    let sdl_context = sdl2::init().unwrap();
+  pub fn new(sdl_context: sdl2::Sdl) -> Self {
     let video_subsystem = sdl_context.video().unwrap();
 
     let gl_attr = video_subsystem.gl_attr();
@@ -160,7 +158,6 @@ impl Renderer {
     }
 
     Self {
-      sdl_context,
       video_subsystem,
       window,
       gl_context,

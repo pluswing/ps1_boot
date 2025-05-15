@@ -49,7 +49,7 @@ pub struct Gpu {
 }
 
 impl Gpu {
-  pub fn new() -> Self {
+  pub fn new(sdl_context: sdl2::Sdl) -> Self {
     Self {
       page_base_x: 0,
       page_base_y: 0,
@@ -95,7 +95,7 @@ impl Gpu {
       gp0_command_method: Gpu::gp0_nop as fn(&mut Gpu),
       gp0_mode: Gp0Mode::Command,
 
-      renderer: Renderer::new(),
+      renderer: Renderer::new(sdl_context),
     }
   }
 

@@ -1,6 +1,6 @@
 use core::panic;
 
-use crate::{bios::Bios, channel::{Direction, Step, Sync}, dma::{Dma, Port}, gpu::Gpu, ram::Ram};
+use crate::{bios::Bios, channel::{Direction, Step, Sync}, dma::{Dma, Port}, gpu::Gpu, ram::Ram, spu::Spu};
 
 
 pub struct Interconnect {
@@ -8,15 +8,17 @@ pub struct Interconnect {
   ram: Ram,
   dma: Dma,
   gpu: Gpu,
+  spu: Spu,
 }
 
 impl Interconnect {
-  pub fn new(bios: Bios) -> Self {
+  pub fn new(bios: Bios, gpu: Gpu, spu: Spu) -> Self {
     Self {
       bios,
       ram: Ram::new(),
       dma: Dma::new(),
-      gpu: Gpu::new(),
+      gpu,
+      spu,
     }
   }
 
