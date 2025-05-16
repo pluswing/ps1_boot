@@ -5,7 +5,7 @@ pub struct Cpu {
   next_pc: u32,
   regs: [u32; 32],
   out_regs: [u32; 32],
-  inter: Interconnect,
+  pub inter: Interconnect,
   next_instruction: Instruction,
 
   // COP0

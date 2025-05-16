@@ -7,8 +7,8 @@ pub struct Interconnect {
   bios: Bios,
   ram: Ram,
   dma: Dma,
-  gpu: Gpu,
-  spu: Spu,
+  pub gpu: Gpu,
+  pub spu: Spu,
 }
 
 impl Interconnect {
@@ -114,9 +114,9 @@ impl Interconnect {
     }
     let abs_addr = mask_region(addr);
 
-    if let Some(_) = map::SPU.contains(abs_addr) {
-      println!("Unhandled read from SPU register {:08X}", abs_addr);
-      return 0;
+    if let Some(offset) = map::SPU.contains(abs_addr) {
+      // println!("Unhandled read from SPU register {:08X}", abs_addr);
+      return self.spu.load(offset);
     }
     if let Some(offset) = map::RAM.contains(abs_addr) {
       return self.ram.load16(offset);
@@ -142,7 +142,8 @@ impl Interconnect {
     }
 
     if let Some(offset) = map::SPU.contains(abs_addr) {
-      println!("Unhandled write to SPU register {:X}", offset);
+      // println!("Unhandled write to SPU register {:X}", offset);
+      self.spu.store(offset, val);
       return;
     }
 

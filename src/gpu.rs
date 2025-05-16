@@ -46,10 +46,11 @@ pub struct Gpu {
   gp0_mode: Gp0Mode,
 
   renderer: Renderer,
+  pub frame_updated: bool,
 }
 
 impl Gpu {
-  pub fn new(sdl_context: sdl2::Sdl) -> Self {
+  pub fn new(video_subsystem: sdl2::VideoSubsystem) -> Self {
     Self {
       page_base_x: 0,
       page_base_y: 0,
@@ -95,7 +96,8 @@ impl Gpu {
       gp0_command_method: Gpu::gp0_nop as fn(&mut Gpu),
       gp0_mode: Gp0Mode::Command,
 
-      renderer: Renderer::new(sdl_context),
+      renderer: Renderer::new(video_subsystem),
+      frame_updated: false,
     }
   }
 
@@ -222,6 +224,7 @@ impl Gpu {
     self.renderer.set_draw_offset(self.drawing_x_offset, self.drawing_y_offset);
 
     self.renderer.display();
+    self.frame_updated = true;
   }
 
   fn gp0_texture_window(&mut self) {

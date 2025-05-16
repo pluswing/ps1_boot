@@ -40,11 +40,11 @@ fn decode_adpcm_block(block: &[u8], decoded: &mut [i16; 28], old_sample: &mut i1
 pub struct Spu {
   voices: [Voice; 24],
   device: AudioQueue<i16>,
+  // sound_ram:
 }
 
 impl Spu {
-  pub fn new(sdl_context: sdl2::Sdl) -> Self {
-    let audio_subsystem = sdl_context.audio().unwrap();
+  pub fn new(audio_subsystem: sdl2::AudioSubsystem) -> Self {
     let desired_spec = AudioSpecDesired {
       freq: Some(44100),
       channels: Some(2),
@@ -58,6 +58,38 @@ impl Spu {
       voices: [Voice::new(); 24],
       device,
     }
+  }
+
+  pub fn load(&self, offset: u32) -> u16 {
+    0
+  }
+
+  pub fn store(&mut self, offset: u32, val: u16) {
+    match offset {
+      0x0000..=0x017F => {  // 0x1F801C00..=0x1F801D7F
+        let index = (offset / 0x10) as usize;
+        self.voices[index].store(offset % 0x10, val);
+      }
+      _ => {
+        println!("Unhandled SPU store: {:08X} {:04X}", offset, val);
+      }
+    }
+  }
+
+  pub fn clock(&mut self) {
+    let mut mixed_sample: i32 = 0;
+    for voice in &self.voices {
+      // voice.clock(self.sound_ram);
+
+      if !voice.keyed_on {
+        continue;
+      }
+
+      mixed_sample = mixed_sample + i32::from(voice.current_sample / 4);
+    }
+
+    let output_sample = mixed_sample.clamp(-0x8000, 0x7FFF) as i16;
+    self.device.queue_audio(&[output_sample]).unwrap()
   }
 }
 
@@ -73,6 +105,8 @@ struct Voice {
   sample_rete: u16,
   current_buffer_idx: u8,
   current_sample: i16,
+
+  keyed_on: bool,
 }
 
 impl Voice {
@@ -87,6 +121,7 @@ impl Voice {
       sample_rete: 0,
       current_buffer_idx: 0,
       current_sample: 0,
+      keyed_on: false,
     }
   }
 
@@ -112,6 +147,7 @@ impl Voice {
     self.current_address = self.start_address;
     self.pitch_counter = 0;
     self.decode_next_block(sound_ram);
+    self.keyed_on = true;
   }
 
   fn decode_next_block(&mut self, sound_ram: &[u8]) {
@@ -142,6 +178,10 @@ impl Voice {
       } else {
         self.current_address += 16;
       }
+  }
+
+  fn store(&mut self, offset: u32, val: u16) {
+    println!("VOICE {:08X} => {:04X}", offset, val);
   }
 }
 

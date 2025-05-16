@@ -115,9 +115,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-  pub fn new(sdl_context: sdl2::Sdl) -> Self {
-    let video_subsystem = sdl_context.video().unwrap();
-
+  pub fn new(video_subsystem: sdl2::VideoSubsystem) -> Self {
     let gl_attr = video_subsystem.gl_attr();
     gl_attr.set_context_profile(sdl2::video::GLProfile::Core);
     gl_attr.set_context_version(3, 3);
@@ -287,15 +285,6 @@ impl Renderer {
 
   pub fn display(&mut self) {
     self.draw();
-
-    let mut event_pump = self.sdl_context.event_pump().unwrap();
-    for event in event_pump.poll_iter() {
-      match event {
-        sdl2::event::Event::Quit {..} => panic!("exit!"),
-        _ => {},
-      }
-    }
-
     self.window.gl_swap_window();
   }
 }
