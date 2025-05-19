@@ -11,7 +11,7 @@ fn decode_adpcm_block(block: &[u8], decoded: &mut [i16; 28], old_sample: &mut i1
 
   for sample_idx in 0..28 {
     let sample_byte = block[2 + sample_idx / 2];
-    let sample_nibble = (sample_byte >> (2 * (sample_idx % 2))) & 0x0F;
+    let sample_nibble = (sample_byte >> (4 * (sample_idx % 2))) & 0x0F;
 
     let raw_sample: i32 = (((sample_nibble as i8) << 4) >> 4).into();
 
@@ -40,7 +40,9 @@ fn decode_adpcm_block(block: &[u8], decoded: &mut [i16; 28], old_sample: &mut i1
 pub struct Spu {
   voices: [Voice; 24],
   device: AudioQueue<i16>,
-  // sound_ram:
+
+  sound_ram: [u8; 512 * 1024],
+  sound_ram_start_address: u32,
 }
 
 impl Spu {
@@ -57,6 +59,8 @@ impl Spu {
     Self {
       voices: [Voice::new(); 24],
       device,
+      sound_ram: [0; 512 * 1024],
+      sound_ram_start_address: 0x00,
     }
   }
 
@@ -70,6 +74,17 @@ impl Spu {
         let index = (offset / 0x10) as usize;
         self.voices[index].store(offset % 0x10, val);
       }
+      0x01A6 => { // 0x1F801DA6
+        // サウンドRAMデータポート開始アドレス
+        self.sound_ram_start_address = val as u32;
+      }
+      0x01A8 => { // 1F801DA8
+        // サウンド RAM データ ポート (16 ビット)
+        self.sound_ram[self.sound_ram_start_address as usize] = ((val & 0xFF00) >> 8) as u8;
+        self.sound_ram[(self.sound_ram_start_address + 1) as usize] = (val & 0x00FF) as u8;
+        self.sound_ram_start_address = self.sound_ram_start_address + 2
+      }
+
       _ => {
         println!("Unhandled SPU store: {:08X} {:04X}", offset, val);
       }
@@ -142,6 +157,8 @@ impl Voice {
   }
 
   fn key_on(&mut self, sound_ram: &[u8]) {
+    // 1F801D88h - Voice 0..23 Key ON (Start Attack/Decay/Sustain) (KON) (W)
+    // 1F801D8Ch - Voice 0..23 Key OFF (Start Release) (KOFF) (W)
     self.envelope.key_on();
 
     self.current_address = self.start_address;
@@ -181,7 +198,23 @@ impl Voice {
   }
 
   fn store(&mut self, offset: u32, val: u16) {
-    println!("VOICE {:08X} => {:04X}", offset, val);
+    match offset { /* 0x00 ~ 0x0F */
+      0x04 => {
+        // ADPCMサンプルレート
+        self.sample_rete = val;
+      }
+      0x06 => {
+        // ADPCM開始アドレス
+        self.start_address = (val as u32) << 3;
+      }
+      0x0E => {
+        // ADPCM繰り返しアドレス
+        self.repeat_address = (val as u32) << 3;
+      }
+      _ => {
+        println!("Unhandled Voice Register {:04X} => {:04X}", offset, val);
+      }
+    }
   }
 }
 
