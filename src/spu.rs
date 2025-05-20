@@ -84,6 +84,30 @@ impl Spu {
         self.sound_ram[(self.sound_ram_start_address + 1) as usize] = (val & 0x00FF) as u8;
         self.sound_ram_start_address = self.sound_ram_start_address + 2
       }
+      0x0188 => { // 0x1F801D88
+        // キーオンボイス0～15（0=変更なし、1=キーオン）
+        for (i, voice) in self.voices[0..15].iter_mut().enumerate() {
+          let flag = (val & 0x01 << i) != 0;
+          if flag {
+            voice.key_on(&self.sound_ram);
+          }
+        }
+      }
+      0x018A => { // 0x1F801D8A
+        // キーオンボイス16～23のキー
+        for (i, voice) in self.voices[15..].iter_mut().enumerate() {
+          let flag = (val & 0x01 << i) != 0;
+          if flag {
+            voice.key_on(&self.sound_ram);
+          }
+        }
+      }
+      0x018C => { // 0x1F801D8C
+        // キーオフボイス 0-15 (0=変更なし、1=キーオフ)
+      }
+      0x018E => { // 0x1F801D8E
+        // キーオフボイス16-23
+      }
 
       _ => {
         println!("Unhandled SPU store: {:08X} {:04X}", offset, val);
@@ -93,8 +117,8 @@ impl Spu {
 
   pub fn clock(&mut self) {
     let mut mixed_sample: i32 = 0;
-    for voice in &self.voices {
-      // voice.clock(self.sound_ram);
+    for voice in &mut self.voices {
+      voice.clock(&self.sound_ram);
 
       if !voice.keyed_on {
         continue;
@@ -136,7 +160,7 @@ impl Voice {
       sample_rete: 0,
       current_buffer_idx: 0,
       current_sample: 0,
-      keyed_on: false,
+      keyed_on: true,
     }
   }
 
@@ -157,8 +181,6 @@ impl Voice {
   }
 
   fn key_on(&mut self, sound_ram: &[u8]) {
-    // 1F801D88h - Voice 0..23 Key ON (Start Attack/Decay/Sustain) (KON) (W)
-    // 1F801D8Ch - Voice 0..23 Key OFF (Start Release) (KOFF) (W)
     self.envelope.key_on();
 
     self.current_address = self.start_address;
