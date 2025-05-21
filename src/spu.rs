@@ -43,6 +43,7 @@ pub struct Spu {
 
   sound_ram: [u8; 512 * 1024],
   sound_ram_start_address: u32,
+  write_count: u32, // for debug
 }
 
 impl Spu {
@@ -61,6 +62,7 @@ impl Spu {
       device,
       sound_ram: [0; 512 * 1024],
       sound_ram_start_address: 0x00,
+      write_count: 0,
     }
   }
 
@@ -76,19 +78,22 @@ impl Spu {
       }
       0x01A6 => { // 0x1F801DA6
         // サウンドRAMデータポート開始アドレス
-        self.sound_ram_start_address = val as u32;
+        self.sound_ram_start_address = (val as u32) << 3;
+        self.write_count = 0;
       }
       0x01A8 => { // 1F801DA8
         // サウンド RAM データ ポート (16 ビット)
         self.sound_ram[self.sound_ram_start_address as usize] = ((val & 0xFF00) >> 8) as u8;
         self.sound_ram[(self.sound_ram_start_address + 1) as usize] = (val & 0x00FF) as u8;
-        self.sound_ram_start_address = self.sound_ram_start_address + 2
+        self.sound_ram_start_address = self.sound_ram_start_address + 2;
+        self.write_count = self.write_count + 1;
       }
       0x0188 => { // 0x1F801D88
         // キーオンボイス0～15（0=変更なし、1=キーオン）
         for (i, voice) in self.voices[0..15].iter_mut().enumerate() {
           let flag = (val & 0x01 << i) != 0;
           if flag {
+            println!("VOICE KEY ON[{}]", i);
             voice.key_on(&self.sound_ram);
           }
         }
@@ -98,19 +103,33 @@ impl Spu {
         for (i, voice) in self.voices[15..].iter_mut().enumerate() {
           let flag = (val & 0x01 << i) != 0;
           if flag {
+            println!("VOICE KEY ON[{}]", i+15);
             voice.key_on(&self.sound_ram);
           }
         }
       }
       0x018C => { // 0x1F801D8C
         // キーオフボイス 0-15 (0=変更なし、1=キーオフ)
+        for (i, voice) in self.voices[0..15].iter_mut().enumerate() {
+          let flag = (val & 0x01 << i) != 0;
+          if flag {
+            println!("VOICE KEY OFF[{}]", i);
+            voice.key_off();
+          }
+        }
       }
       0x018E => { // 0x1F801D8E
         // キーオフボイス16-23
+        for (i, voice) in self.voices[15..].iter_mut().enumerate() {
+          let flag = (val & 0x01 << i) != 0;
+          if flag {
+            println!("VOICE KEY OFF[{}]", i+15);
+            voice.key_off();
+          }
+        }
       }
-
       _ => {
-        println!("Unhandled SPU store: {:08X} {:04X}", offset, val);
+        // println!("Unhandled SPU store: {:08X} {:04X}", offset, val);
       }
     }
   }
@@ -128,7 +147,7 @@ impl Spu {
     }
 
     let output_sample = mixed_sample.clamp(-0x8000, 0x7FFF) as i16;
-    self.device.queue_audio(&[output_sample]).unwrap()
+    self.device.queue_audio(&[output_sample, output_sample]).unwrap()
   }
 }
 
@@ -146,6 +165,8 @@ struct Voice {
   current_sample: i16,
 
   keyed_on: bool,
+  volume_l: i16,
+  volume_r: i16,
 }
 
 impl Voice {
@@ -161,6 +182,8 @@ impl Voice {
       current_buffer_idx: 0,
       current_sample: 0,
       keyed_on: true,
+      volume_l: 0x7FFF,
+      volume_r: 0x7FFF,
     }
   }
 
@@ -187,6 +210,11 @@ impl Voice {
     self.pitch_counter = 0;
     self.decode_next_block(sound_ram);
     self.keyed_on = true;
+  }
+
+  fn key_off(&mut self) {
+    self.envelope.key_off();
+    self.keyed_on = false;
   }
 
   fn decode_next_block(&mut self, sound_ram: &[u8]) {
@@ -234,9 +262,17 @@ impl Voice {
         self.repeat_address = (val as u32) << 3;
       }
       _ => {
-        println!("Unhandled Voice Register {:04X} => {:04X}", offset, val);
+        // println!("Unhandled Voice Register {:04X} => {:04X}", offset, val);
       }
     }
+  }
+
+  fn apply_voice_volume(&self, adpcm_sample: i16) -> (i16, i16) {
+    let envelope_sample = apply_volume(adpcm_sample, self.envelope.level);
+
+    let output_l = apply_volume(envelope_sample, self.volume_l);
+    let output_r = apply_volume(envelope_sample, self.volume_r);
+    (output_l, output_r)
   }
 }
 

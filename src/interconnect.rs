@@ -35,7 +35,7 @@ impl Interconnect {
       return self.ram.load32(offset);
     }
     if let Some(offset) = map::IRQ_CONTROL.contains(abs_addr) {
-      println!("IRQ control read: {:X}", offset);
+      // println!("IRQ control read: {:X}", offset);
       return 0;
     }
     if let Some(offset) = map::DMA.contains(abs_addr) {
@@ -49,7 +49,7 @@ impl Interconnect {
       };
     }
     if let Some(offset) = map::TIMERS.contains(abs_addr) {
-      println!("Unhandled write to timer register {:08X}", offset);
+      // println!("Unhandled write to timer register {:08X}", offset);
       return 0;
     }
 
@@ -87,7 +87,7 @@ impl Interconnect {
       return;
     }
     if let Some(offset) = map::IRQ_CONTROL.contains(abs_addr) {
-      println!("IRQ control: {:X} <- {:08X}", offset, val);
+      // println!("IRQ control: {:X} <- {:08X}", offset, val);
       return;
     }
     if let Some(offset) = map::DMA.contains(abs_addr) {
@@ -102,7 +102,7 @@ impl Interconnect {
       return;
     }
     if let Some(offset) = map::TIMERS.contains(abs_addr) {
-      println!("Unhandled write to timer register {:08X} {:08X}", offset, val);
+      // println!("Unhandled write to timer register {:08X} {:08X}", offset, val);
       return;
     }
     panic!("unhandled store32 at address {:08X}", addr)
@@ -123,7 +123,7 @@ impl Interconnect {
     }
 
     if let Some(offset) = map::IRQ_CONTROL.contains(abs_addr) {
-      println!("IRQ control read {:08X}", offset);
+      // println!("IRQ control read {:08X}", offset);
       return 0;
     }
 
@@ -148,12 +148,12 @@ impl Interconnect {
     }
 
     if let Some(offset) = map::TIMERS.contains(abs_addr) {
-      println!("Unhandled write to timer register {:X}", offset);
+      // println!("Unhandled write to timer register {:X}", offset);
       return;
     }
 
     if let Some(offset) = map::IRQ_CONTROL.contains(abs_addr) {
-      println!("IRQ control write {:08X} {:04X}", offset, val);
+      // println!("IRQ control write {:08X} {:04X}", offset, val);
       return;
     }
 
