@@ -43,6 +43,8 @@ pub struct Spu {
 
   sound_ram: [u8; 512 * 1024],
   sound_ram_start_address: u32,
+  main_volume_l: i16,
+  main_volume_r: i16,
   write_count: u32, // for debug
 }
 
@@ -63,6 +65,8 @@ impl Spu {
       sound_ram: [0; 512 * 1024],
       sound_ram_start_address: 0x00,
       write_count: 0,
+      main_volume_l: 0x7FFF,
+      main_volume_r: 0x7FFF,
     }
   }
 
@@ -83,8 +87,8 @@ impl Spu {
       }
       0x01A8 => { // 1F801DA8
         // サウンド RAM データ ポート (16 ビット)
-        self.sound_ram[self.sound_ram_start_address as usize] = ((val & 0xFF00) >> 8) as u8;
-        self.sound_ram[(self.sound_ram_start_address + 1) as usize] = (val & 0x00FF) as u8;
+        self.sound_ram[self.sound_ram_start_address as usize] = val as u8;
+        self.sound_ram[(self.sound_ram_start_address + 1) as usize] = (val >> 8) as u8;
         self.sound_ram_start_address = self.sound_ram_start_address + 2;
         self.write_count = self.write_count + 1;
       }
@@ -135,19 +139,27 @@ impl Spu {
   }
 
   pub fn clock(&mut self) {
-    let mut mixed_sample: i32 = 0;
+
+    let mut mixed_l = 0;
+    let mut mixed_r = 0;
     for voice in &mut self.voices {
       voice.clock(&self.sound_ram);
 
       if !voice.keyed_on {
         continue;
       }
-
-      mixed_sample = mixed_sample + i32::from(voice.current_sample / 4);
+      let s = voice.current_sample;
+      let (voice_sample_l, voice_sample_r) = voice.apply_voice_volume(s);
+      mixed_l += i32::from(voice_sample_l);
+      mixed_r += i32::from(voice_sample_r);
     }
 
-    let output_sample = mixed_sample.clamp(-0x8000, 0x7FFF) as i16;
-    self.device.queue_audio(&[output_sample, output_sample]).unwrap()
+    let clamped_l = mixed_l.clamp(-0x8000, 0x7FFF) as i16;
+    let clamped_r = mixed_r.clamp(-0x8000, 0x7FFF) as i16;
+
+    let output_l = apply_volume(clamped_l, self.main_volume_l);
+    let output_r = apply_volume(clamped_r, self.main_volume_r);
+    self.device.queue_audio(&[output_l, output_r]).unwrap()
   }
 }
 
@@ -276,15 +288,21 @@ impl Voice {
   }
 }
 
+fn apply_volume(sample: i16, volume: i16) -> i16 {
+  ((i32::from(sample) * i32::from(volume)) >> 15) as i16
+}
+
 #[derive(Copy, Clone, Default, Debug)]
 struct AdsrEnvelope {
   volume: u32,
+  level: i16,
 }
 
 impl AdsrEnvelope {
   fn new() -> Self {
     Self {
-      volume: 0
+      volume: 0,
+      level: 0x7FFF, // TODO MAX VOLUME
     }
   }
   fn key_on(&self) {

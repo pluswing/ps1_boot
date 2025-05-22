@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{path::Path, time::Instant};
 
 use bios::Bios;
 use cpu::Cpu;
@@ -29,14 +29,23 @@ fn main() {
   let mut cpu = Cpu::new(inter);
   let mut event_pump = sdl_context.event_pump().unwrap();
 
+  let mut interval = 1_000_000_000 / 44100;
+  let mut now = Instant::now();
+  let mut nanos: u128 = 0;
+
+  let mut now2 = Instant::now();
   let mut counter = 0;
   loop {
     cpu.run_next_instruction();
-    counter = counter + 1;
-    if counter >= 768 {
-      counter = 0;
+
+    nanos += now.elapsed().as_nanos();
+    while nanos >= interval {
+      nanos -= interval;
       cpu.inter.spu.clock();
+      counter += 1;
     }
+    now = Instant::now();
+
     if cpu.inter.gpu.frame_updated {
       cpu.inter.gpu.frame_updated = false;
       for event in event_pump.poll_iter() {
@@ -45,6 +54,12 @@ fn main() {
           _ => {},
         }
       }
+    }
+
+    if now2.elapsed().as_nanos() >= 1_000_000_000 {
+      println!("SPU CLOCK: {}", counter);
+      counter = 0;
+      now2 = Instant::now();
     }
   }
 }
