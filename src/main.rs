@@ -38,13 +38,16 @@ fn main() {
   loop {
     cpu.run_next_instruction();
 
-    nanos += now.elapsed().as_nanos();
-    while nanos >= interval {
-      nanos -= interval;
-      cpu.inter.spu.clock();
-      counter += 1;
+    let n = now.elapsed().as_nanos();
+    if n > interval * 20 {
+      nanos += n;
+      while nanos >= interval {
+        nanos -= interval;
+        cpu.inter.spu.clock();
+        counter += 1;
+      }
+      now = Instant::now();
     }
-    now = Instant::now();
 
     if cpu.inter.gpu.frame_updated {
       cpu.inter.gpu.frame_updated = false;

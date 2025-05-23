@@ -70,11 +70,16 @@ impl Spu {
     }
   }
 
-  pub fn load(&self, offset: u32) -> u16 {
-    0
+  pub fn load(&self, abs_addr: u32, offset: u32) -> u16 {
+    match offset {
+      0x01AC => { // 0x1F801DAC サウンド RAM データ転送制御
+        0x0004
+      }
+      _ => 0
+    }
   }
 
-  pub fn store(&mut self, offset: u32, val: u16) {
+  pub fn store(&mut self, abs_addr: u32, offset: u32, val: u16) {
     match offset {
       0x0000..=0x017F => {  // 0x1F801C00..=0x1F801D7F
         let index = (offset / 0x10) as usize;
@@ -133,7 +138,7 @@ impl Spu {
         }
       }
       _ => {
-        // println!("Unhandled SPU store: {:08X} {:04X}", offset, val);
+        // println!("Unhandled SPU store: {:08X}({:04X}) {:04X}", abs_addr, offset, val);
       }
     }
   }
@@ -143,11 +148,12 @@ impl Spu {
     let mut mixed_l = 0;
     let mut mixed_r = 0;
     for voice in &mut self.voices {
-      voice.clock(&self.sound_ram);
-
       if !voice.keyed_on {
         continue;
       }
+
+      voice.clock(&self.sound_ram);
+
       let s = voice.current_sample;
       let (voice_sample_l, voice_sample_r) = voice.apply_voice_volume(s);
       mixed_l += i32::from(voice_sample_l);

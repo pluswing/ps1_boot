@@ -116,7 +116,7 @@ impl Interconnect {
 
     if let Some(offset) = map::SPU.contains(abs_addr) {
       // println!("Unhandled read from SPU register {:08X}", abs_addr);
-      return self.spu.load(offset);
+      return self.spu.load(abs_addr, offset);
     }
     if let Some(offset) = map::RAM.contains(abs_addr) {
       return self.ram.load16(offset);
@@ -143,7 +143,7 @@ impl Interconnect {
 
     if let Some(offset) = map::SPU.contains(abs_addr) {
       // println!("Unhandled write to SPU register {:X}", offset);
-      self.spu.store(offset, val);
+      self.spu.store(abs_addr, offset, val);
       return;
     }
 
