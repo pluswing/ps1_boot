@@ -169,7 +169,7 @@ impl Spu {
   }
 }
 
-#[derive(Copy, Clone, Default, Debug)]
+#[derive(Copy, Clone, Debug)]
 struct Voice {
   start_address: u32,
   repeat_address: u32,
@@ -178,7 +178,7 @@ struct Voice {
   decode_buffer: [i16; 28],
   envelope: AdsrEnvelope,
 
-  sample_rete: u16,
+  sample_rate: u16,
   current_buffer_idx: u8,
   current_sample: i16,
 
@@ -196,7 +196,7 @@ impl Voice {
       pitch_counter: 0,
       decode_buffer: [0; 28],
       envelope: AdsrEnvelope::new(),
-      sample_rete: 0,
+      sample_rate: 0,
       current_buffer_idx: 0,
       current_sample: 0,
       keyed_on: true,
@@ -206,7 +206,7 @@ impl Voice {
   }
 
   fn clock(&mut self, sound_ram: &[u8]) {
-    let pitch_counter_step = cmp::min(0x4000, self.sample_rete);
+    let pitch_counter_step = cmp::min(0x4000, self.sample_rate);
     self.pitch_counter = self.pitch_counter + pitch_counter_step;
 
     while self.pitch_counter >= 0x1000 {
@@ -269,7 +269,7 @@ impl Voice {
     match offset { /* 0x00 ~ 0x0F */
       0x04 => {
         // ADPCMサンプルレート
-        self.sample_rete = val;
+        self.sample_rate = val;
       }
       0x06 => {
         // ADPCM開始アドレス
@@ -298,10 +298,13 @@ fn apply_volume(sample: i16, volume: i16) -> i16 {
   ((i32::from(sample) * i32::from(volume)) >> 15) as i16
 }
 
-#[derive(Copy, Clone, Default, Debug)]
+#[derive(Copy, Clone, Debug)]
 struct AdsrEnvelope {
   volume: u32,
   level: i16,
+  counter: u32,
+  phase: AdsrPhase,
+  sustain_level: u16,
 }
 
 impl AdsrEnvelope {
@@ -309,10 +312,78 @@ impl AdsrEnvelope {
     Self {
       volume: 0,
       level: 0x7FFF, // TODO MAX VOLUME
+      counter: 0,
+      phase: AdsrPhase::Release,
+      sustain_level: 0,
     }
   }
-  fn key_on(&self) {
+  fn clock(&mut self, direction: Direction, rate: ChangeRate, shift: u8) {
+    let mut counter_decrement = ENVELOPE_CONTER_MAX >> shift.saturating_sub(11);
+
+    if direction == Direction::Increasing && rate == ChangeRate::Exponential && self.level > 0x6000 {
+      counter_decrement >>= 2;
+    }
+
+    self.counter = self.counter.saturating_sub(counter_decrement);
+    if self.counter == 0 {
+      self.counter = ENVELOPE_CONTER_MAX;
+      todo!("update envelope")
+    }
   }
-  fn key_off(&self) {
+
+  fn update(&mut self, direction: Direction, rate: ChangeRate, shift: u8, step: u8) {
+    let mut step = i32::from(7 - step);
+    if direction == Direction::Decreasing {
+      step = !step;
+    }
+    step <<= 11_u8.saturating_sub(shift);
+
+    let current_level: i32 = self.level.into();
+    if direction == Direction::Decreasing && rate == ChangeRate::Exponential {
+      step = (step * current_level) >> 15;
+    }
+    self.level = (current_level + step).clamp(0, 0x7FFF) as i16;
   }
+
+  fn key_on(&mut self) {
+    self.level = 0;
+    self.phase = AdsrPhase::Attack;
+  }
+
+  fn key_off(&mut self) {
+    self.phase = AdsrPhase::Release;
+  }
+
+  fn check_for_phase_transition(&mut self) {
+    if self.phase == AdsrPhase::Attack && self.level == 0x7FFF {
+      self.phase = AdsrPhase::Decay;
+    }
+
+    if self.phase == AdsrPhase::Decay && (self.level as u16) <= self.sustain_level {
+      self.phase = AdsrPhase::Sustain;
+    }
+  }
+
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum Direction {
+  Increasing,
+  Decreasing,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum ChangeRate {
+  Linear,
+  Exponential,
+}
+
+const ENVELOPE_CONTER_MAX: u32 = 1 << (33 - 11);
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum AdsrPhase {
+  Attack,
+  Decay,
+  Sustain,
+  Release,
 }
