@@ -137,6 +137,24 @@ impl Spu {
           }
         }
       }
+      0x01B8 => { // 0x1F801DB8 メイン左ボリューム
+        if val & 0x8000 != 0 {
+          // エンベロープ有効
+          println!("MAIN LEFT VOLUME *ENVELOPE* {:04X}", val)
+        } else {
+          // 一定音量
+          self.main_volume_l = (val << 1) as i16;
+        }
+      }
+      0x01BA => { // 0x1F801DB8 メイン右ボリューム
+        if val & 0x8000 != 0 {
+          // エンベロープ有効
+          println!("MAIN RIGHT VOLUME *ENVELOPE* {:04X}", val)
+        } else {
+          // 一定音量
+          self.main_volume_r = (val << 1) as i16;
+        }
+      }
       _ => {
         // println!("Unhandled SPU store: {:08X}({:04X}) {:04X}", abs_addr, offset, val);
       }
@@ -185,6 +203,11 @@ struct Voice {
   keyed_on: bool,
   volume_l: i16,
   volume_r: i16,
+
+  // envelope関連
+  enable_envelope: bool,
+  adsr1: u16,
+  adsr2: u16,
 }
 
 impl Voice {
@@ -202,10 +225,38 @@ impl Voice {
       keyed_on: true,
       volume_l: 0x7FFF,
       volume_r: 0x7FFF,
+
+      enable_envelope: false,
+      adsr1: 0,
+      adsr2: 0,
     }
   }
 
   fn clock(&mut self, sound_ram: &[u8]) {
+
+    if self.enable_envelope {
+      let mut direction = Direction::Increasing;
+      let mut rate = ChangeRate::Linear;
+      let mut shift: u8 = 0;
+      let mut step: u8 = 0;
+      match self.envelope.phase {
+        AdsrPhase::Attack => {
+          // TODO
+        }
+        AdsrPhase::Decay => {
+
+        }
+        AdsrPhase::Sustain => {
+
+        }
+        AdsrPhase::Release => {
+        }
+      }
+      self.envelope.check_for_phase_transition();
+      self.envelope.update(direction, rate, shift, step);
+      self.envelope.clock(direction, rate, shift);
+    }
+
     let pitch_counter_step = cmp::min(0x4000, self.sample_rate);
     self.pitch_counter = self.pitch_counter + pitch_counter_step;
 
@@ -267,6 +318,16 @@ impl Voice {
 
   fn store(&mut self, offset: u32, val: u16) {
     match offset { /* 0x00 ~ 0x0F */
+      0x00 => {
+        // 左音量
+        self.enable_envelope = val & 0x8000 != 0;
+        self.volume_l = (val << 1) as i16;
+      }
+      0x02 => {
+        // 右音量
+        self.enable_envelope = val & 0x8000 != 0;
+        self.volume_r = (val << 1) as i16;
+      }
       0x04 => {
         // ADPCMサンプルレート
         self.sample_rate = val;
@@ -274,6 +335,17 @@ impl Voice {
       0x06 => {
         // ADPCM開始アドレス
         self.start_address = (val as u32) << 3;
+      }
+      0x08 => {
+        // アタック設定、ディケイ設定、サステインレベル
+        self.adsr1 = val;
+      }
+      0x0A => {
+        // サステイン設定、リリース設定
+        self.adsr2 = val;
+      }
+      0x0C => {
+        // なにかしらある
       }
       0x0E => {
         // ADPCM繰り返しアドレス
