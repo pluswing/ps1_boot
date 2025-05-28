@@ -241,15 +241,48 @@ impl Voice {
       let mut step: u8 = 0;
       match self.envelope.phase {
         AdsrPhase::Attack => {
-          // TODO
+          // 15    Attack Mode       (0=Linear, 1=Exponential)
+          // -     Attack Direction  (Fixed, always Increase) (until Level 7FFFh)
+          // 14-10 Attack Shift      (0..1Fh = Fast..Slow)
+          // 9-8   Attack Step       (0..3 = "+7,+6,+5,+4")
+          rate = if self.adsr1 & 0x8000 == 0 { ChangeRate::Linear } else { ChangeRate::Exponential };
+          direction = Direction::Increasing;
+          shift = ((self.adsr1 & 0x7C00) >> 10) as u8;
+          step = ((self.adsr1 & 0x0300) >> 8) as u8;
         }
         AdsrPhase::Decay => {
-
+          // -     Decay Mode        (Fixed, always Exponential)
+          // -     Decay Direction   (Fixed, always Decrease) (until Sustain Level)
+          // 7-4   Decay Shift       (0..0Fh = Fast..Slow)
+          // -     Decay Step        (Fixed, always "-8")
+          rate = ChangeRate::Exponential;
+          direction = Direction::Decreasing;
+          shift = ((self.adsr1 & 0x0078) >> 3) as u8;
+          step = 0;
         }
         AdsrPhase::Sustain => {
+          // 3-0   Sustain Level     (0..0Fh)  ;Level=(N+1)*800h
+          self.envelope.sustain_level = self.adsr1 & 0x0007;
 
+          // 31    Sustain Mode      (0=Linear, 1=Exponential)
+          // 30    Sustain Direction (0=Increase, 1=Decrease) (until Key OFF flag)
+          // 29    Not used?         (should be zero)
+          // 28-24 Sustain Shift     (0..1Fh = Fast..Slow)
+          // 23-22 Sustain Step      (0..3 = "+7,+6,+5,+4" or "-8,-7,-6,-5") (inc/dec)
+          rate = if self.adsr2 & 0x2000 == 0 { ChangeRate::Linear } else { ChangeRate::Exponential };
+          direction = if self.adsr2 & 0x1000 == 0 { Direction::Increasing } else { Direction::Decreasing };
+          shift = ((self.adsr2 & 0x0780) >> 9) as u8;
+          step = ((self.adsr2 & 0x0060) >> 7) as u8;
         }
         AdsrPhase::Release => {
+          // 21    Release Mode      (0=Linear, 1=Exponential)
+          // -     Release Direction (Fixed, always Decrease) (until Level 0000h)
+          // 20-16 Release Shift     (0..1Fh = Fast..Slow)
+          // -     Release Step      (Fixed, always "-8")
+          rate = if (self.adsr2 & 0x0010) != 0 { ChangeRate::Linear } else { ChangeRate::Exponential };
+          direction = Direction::Decreasing;
+          shift = (self.adsr2 & 0x000F) as u8;
+          step = 0;
         }
       }
       self.envelope.check_for_phase_transition();
@@ -360,6 +393,7 @@ impl Voice {
   fn apply_voice_volume(&self, adpcm_sample: i16) -> (i16, i16) {
     let envelope_sample = apply_volume(adpcm_sample, self.envelope.level);
 
+    // TODO エンベロープを効かせる
     let output_l = apply_volume(envelope_sample, self.volume_l);
     let output_r = apply_volume(envelope_sample, self.volume_r);
     (output_l, output_r)
