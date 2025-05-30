@@ -83,7 +83,7 @@ impl Spu {
     match offset {
       0x0000..=0x017F => {  // 0x1F801C00..=0x1F801D7F
         let index = (offset / 0x10) as usize;
-        self.voices[index].store(offset % 0x10, val);
+        self.voices[index].store(index, offset % 0x10, val);
       }
       0x01A6 => { // 0x1F801DA6
         // サウンドRAMデータポート開始アドレス
@@ -144,15 +144,17 @@ impl Spu {
         } else {
           // 一定音量
           self.main_volume_l = (val << 1) as i16;
+          println!("MAIN LEFT VOLUME *CONST* {:04X}", self.main_volume_l);
         }
       }
-      0x01BA => { // 0x1F801DB8 メイン右ボリューム
+      0x01BA => { // 0x1F801DBA メイン右ボリューム
         if val & 0x8000 != 0 {
           // エンベロープ有効
           println!("MAIN RIGHT VOLUME *ENVELOPE* {:04X}", val)
         } else {
           // 一定音量
           self.main_volume_r = (val << 1) as i16;
+          println!("MAIN RIGHT VOLUME *CONST* {:04X}", self.main_volume_r);
         }
       }
       _ => {
@@ -233,7 +235,6 @@ impl Voice {
   }
 
   fn clock(&mut self, sound_ram: &[u8]) {
-
     if self.enable_envelope {
       let mut direction = Direction::Increasing;
       let mut rate = ChangeRate::Linear;
@@ -269,19 +270,19 @@ impl Voice {
           // 29    Not used?         (should be zero)
           // 28-24 Sustain Shift     (0..1Fh = Fast..Slow)
           // 23-22 Sustain Step      (0..3 = "+7,+6,+5,+4" or "-8,-7,-6,-5") (inc/dec)
-          rate = if self.adsr2 & 0x2000 == 0 { ChangeRate::Linear } else { ChangeRate::Exponential };
-          direction = if self.adsr2 & 0x1000 == 0 { Direction::Increasing } else { Direction::Decreasing };
-          shift = ((self.adsr2 & 0x0780) >> 9) as u8;
-          step = ((self.adsr2 & 0x0060) >> 7) as u8;
+          rate = if self.adsr2 & 0x8000 == 0 { ChangeRate::Linear } else { ChangeRate::Exponential };
+          direction = if self.adsr2 & 0x4000 == 0 { Direction::Increasing } else { Direction::Decreasing };
+          shift = ((self.adsr2 & 0x1F00) >> 8) as u8;
+          step = ((self.adsr2 & 0x00C0) >> 6) as u8;
         }
         AdsrPhase::Release => {
           // 21    Release Mode      (0=Linear, 1=Exponential)
           // -     Release Direction (Fixed, always Decrease) (until Level 0000h)
           // 20-16 Release Shift     (0..1Fh = Fast..Slow)
           // -     Release Step      (Fixed, always "-8")
-          rate = if (self.adsr2 & 0x0010) != 0 { ChangeRate::Linear } else { ChangeRate::Exponential };
+          rate = if (self.adsr2 & 0x0020) != 0 { ChangeRate::Linear } else { ChangeRate::Exponential };
           direction = Direction::Decreasing;
-          shift = (self.adsr2 & 0x000F) as u8;
+          shift = (self.adsr2 & 0x001F) as u8;
           step = 0;
         }
       }
@@ -349,17 +350,23 @@ impl Voice {
       }
   }
 
-  fn store(&mut self, offset: u32, val: u16) {
+  fn store(&mut self, index: usize, offset: u32, val: u16) {
     match offset { /* 0x00 ~ 0x0F */
       0x00 => {
         // 左音量
         self.enable_envelope = val & 0x8000 != 0;
-        self.volume_l = (val << 1) as i16;
+        if !self.enable_envelope {
+          self.volume_l = (val << 1) as i16;
+        }
+        println!("VOICE{} LEFT VOLUME: {:04X}", index, val);
       }
       0x02 => {
         // 右音量
         self.enable_envelope = val & 0x8000 != 0;
-        self.volume_r = (val << 1) as i16;
+        if !self.enable_envelope {
+          self.volume_r = (val << 1) as i16;
+        }
+        println!("VOICE{} RIGHT VOLUME: {:04X}", index, val);
       }
       0x04 => {
         // ADPCMサンプルレート
@@ -391,9 +398,9 @@ impl Voice {
   }
 
   fn apply_voice_volume(&self, adpcm_sample: i16) -> (i16, i16) {
-    let envelope_sample = apply_volume(adpcm_sample, self.envelope.level);
+    let envelope_sample = if self.enable_envelope {
+       apply_volume(adpcm_sample, self.envelope.level) } else { adpcm_sample };
 
-    // TODO エンベロープを効かせる
     let output_l = apply_volume(envelope_sample, self.volume_l);
     let output_r = apply_volume(envelope_sample, self.volume_r);
     (output_l, output_r)
