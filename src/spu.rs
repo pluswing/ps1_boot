@@ -137,7 +137,8 @@ impl Spu {
           }
         }
       }
-      0x01B8 => { // 0x1F801DB8 メイン左ボリューム
+
+      0x0180 => { // 0x1F801D80 メイン左ボリューム
         if val & 0x8000 != 0 {
           // エンベロープ有効
           println!("MAIN LEFT VOLUME *ENVELOPE* {:04X}", val)
@@ -147,7 +148,7 @@ impl Spu {
           println!("MAIN LEFT VOLUME *CONST* {:04X}", self.main_volume_l);
         }
       }
-      0x01BA => { // 0x1F801DBA メイン右ボリューム
+      0x0182 => { // 0x1F801D82 メイン右ボリューム
         if val & 0x8000 != 0 {
           // エンベロープ有効
           println!("MAIN RIGHT VOLUME *ENVELOPE* {:04X}", val)
@@ -206,8 +207,11 @@ struct Voice {
   volume_l: i16,
   volume_r: i16,
 
+  enable_sweep_l: bool,
+  enable_sweep_r: bool,
+  sweep_l: u16,
+  sweep_r: u16,
   // envelope関連
-  enable_envelope: bool,
   adsr1: u16,
   adsr2: u16,
 }
@@ -228,68 +232,70 @@ impl Voice {
       volume_l: 0x7FFF,
       volume_r: 0x7FFF,
 
-      enable_envelope: false,
+      enable_sweep_l: false,
+      enable_sweep_r: false,
+      sweep_l: 0,
+      sweep_r: 0,
+
       adsr1: 0,
       adsr2: 0,
     }
   }
 
   fn clock(&mut self, sound_ram: &[u8]) {
-    if self.enable_envelope {
-      let mut direction = Direction::Increasing;
-      let mut rate = ChangeRate::Linear;
-      let mut shift: u8 = 0;
-      let mut step: u8 = 0;
-      match self.envelope.phase {
-        AdsrPhase::Attack => {
-          // 15    Attack Mode       (0=Linear, 1=Exponential)
-          // -     Attack Direction  (Fixed, always Increase) (until Level 7FFFh)
-          // 14-10 Attack Shift      (0..1Fh = Fast..Slow)
-          // 9-8   Attack Step       (0..3 = "+7,+6,+5,+4")
-          rate = if self.adsr1 & 0x8000 == 0 { ChangeRate::Linear } else { ChangeRate::Exponential };
-          direction = Direction::Increasing;
-          shift = ((self.adsr1 & 0x7C00) >> 10) as u8;
-          step = ((self.adsr1 & 0x0300) >> 8) as u8;
-        }
-        AdsrPhase::Decay => {
-          // -     Decay Mode        (Fixed, always Exponential)
-          // -     Decay Direction   (Fixed, always Decrease) (until Sustain Level)
-          // 7-4   Decay Shift       (0..0Fh = Fast..Slow)
-          // -     Decay Step        (Fixed, always "-8")
-          rate = ChangeRate::Exponential;
-          direction = Direction::Decreasing;
-          shift = ((self.adsr1 & 0x0078) >> 3) as u8;
-          step = 0;
-        }
-        AdsrPhase::Sustain => {
-          // 3-0   Sustain Level     (0..0Fh)  ;Level=(N+1)*800h
-          self.envelope.sustain_level = self.adsr1 & 0x0007;
-
-          // 31    Sustain Mode      (0=Linear, 1=Exponential)
-          // 30    Sustain Direction (0=Increase, 1=Decrease) (until Key OFF flag)
-          // 29    Not used?         (should be zero)
-          // 28-24 Sustain Shift     (0..1Fh = Fast..Slow)
-          // 23-22 Sustain Step      (0..3 = "+7,+6,+5,+4" or "-8,-7,-6,-5") (inc/dec)
-          rate = if self.adsr2 & 0x8000 == 0 { ChangeRate::Linear } else { ChangeRate::Exponential };
-          direction = if self.adsr2 & 0x4000 == 0 { Direction::Increasing } else { Direction::Decreasing };
-          shift = ((self.adsr2 & 0x1F00) >> 8) as u8;
-          step = ((self.adsr2 & 0x00C0) >> 6) as u8;
-        }
-        AdsrPhase::Release => {
-          // 21    Release Mode      (0=Linear, 1=Exponential)
-          // -     Release Direction (Fixed, always Decrease) (until Level 0000h)
-          // 20-16 Release Shift     (0..1Fh = Fast..Slow)
-          // -     Release Step      (Fixed, always "-8")
-          rate = if (self.adsr2 & 0x0020) != 0 { ChangeRate::Linear } else { ChangeRate::Exponential };
-          direction = Direction::Decreasing;
-          shift = (self.adsr2 & 0x001F) as u8;
-          step = 0;
-        }
+    let mut direction = Direction::Increasing;
+    let mut rate = ChangeRate::Linear;
+    let mut shift: u8 = 0;
+    let mut step: u8 = 0;
+    match self.envelope.phase {
+      AdsrPhase::Attack => {
+        // 15    Attack Mode       (0=Linear, 1=Exponential)
+        // -     Attack Direction  (Fixed, always Increase) (until Level 7FFFh)
+        // 14-10 Attack Shift      (0..1Fh = Fast..Slow)
+        // 9-8   Attack Step       (0..3 = "+7,+6,+5,+4")
+        rate = if self.adsr1 & 0x8000 == 0 { ChangeRate::Linear } else { ChangeRate::Exponential };
+        direction = Direction::Increasing;
+        shift = ((self.adsr1 & 0x7C00) >> 10) as u8;
+        step = ((self.adsr1 & 0x0300) >> 8) as u8;
       }
-      self.envelope.check_for_phase_transition();
-      self.envelope.update(direction, rate, shift, step);
-      self.envelope.clock(direction, rate, shift);
+      AdsrPhase::Decay => {
+        // -     Decay Mode        (Fixed, always Exponential)
+        // -     Decay Direction   (Fixed, always Decrease) (until Sustain Level)
+        // 7-4   Decay Shift       (0..0Fh = Fast..Slow)
+        // -     Decay Step        (Fixed, always "-8")
+        rate = ChangeRate::Exponential;
+        direction = Direction::Decreasing;
+        shift = ((self.adsr1 & 0x0078) >> 3) as u8;
+        step = 0;
+      }
+      AdsrPhase::Sustain => {
+        // 3-0   Sustain Level     (0..0Fh)  ;Level=(N+1)*800h
+        self.envelope.sustain_level = self.adsr1 & 0x0007;
+
+        // 31    Sustain Mode      (0=Linear, 1=Exponential)
+        // 30    Sustain Direction (0=Increase, 1=Decrease) (until Key OFF flag)
+        // 29    Not used?         (should be zero)
+        // 28-24 Sustain Shift     (0..1Fh = Fast..Slow)
+        // 23-22 Sustain Step      (0..3 = "+7,+6,+5,+4" or "-8,-7,-6,-5") (inc/dec)
+        rate = if self.adsr2 & 0x8000 == 0 { ChangeRate::Linear } else { ChangeRate::Exponential };
+        direction = if self.adsr2 & 0x4000 == 0 { Direction::Increasing } else { Direction::Decreasing };
+        shift = ((self.adsr2 & 0x1F00) >> 8) as u8;
+        step = ((self.adsr2 & 0x00C0) >> 6) as u8;
+      }
+      AdsrPhase::Release => {
+        // 21    Release Mode      (0=Linear, 1=Exponential)
+        // -     Release Direction (Fixed, always Decrease) (until Level 0000h)
+        // 20-16 Release Shift     (0..1Fh = Fast..Slow)
+        // -     Release Step      (Fixed, always "-8")
+        rate = if (self.adsr2 & 0x0020) != 0 { ChangeRate::Linear } else { ChangeRate::Exponential };
+        direction = Direction::Decreasing;
+        shift = (self.adsr2 & 0x001F) as u8;
+        step = 0;
+      }
     }
+    // self.envelope.check_for_phase_transition();
+    // self.envelope.update(direction, rate, shift, step);
+    self.envelope.clock(direction, rate, shift, step);
 
     let pitch_counter_step = cmp::min(0x4000, self.sample_rate);
     self.pitch_counter = self.pitch_counter + pitch_counter_step;
@@ -354,16 +360,20 @@ impl Voice {
     match offset { /* 0x00 ~ 0x0F */
       0x00 => {
         // 左音量
-        self.enable_envelope = val & 0x8000 != 0;
-        if !self.enable_envelope {
+        self.enable_sweep_l = val & 0x8000 != 0;
+        if self.enable_sweep_l {
+          self.sweep_l = val;
+        } else {
           self.volume_l = (val << 1) as i16;
         }
         println!("VOICE{} LEFT VOLUME: {:04X}", index, val);
       }
       0x02 => {
         // 右音量
-        self.enable_envelope = val & 0x8000 != 0;
-        if !self.enable_envelope {
+        self.enable_sweep_r = val & 0x8000 != 0;
+        if self.enable_sweep_r {
+          self.sweep_r = val;
+        } else {
           self.volume_r = (val << 1) as i16;
         }
         println!("VOICE{} RIGHT VOLUME: {:04X}", index, val);
@@ -398,9 +408,7 @@ impl Voice {
   }
 
   fn apply_voice_volume(&self, adpcm_sample: i16) -> (i16, i16) {
-    let envelope_sample = if self.enable_envelope {
-       apply_volume(adpcm_sample, self.envelope.level) } else { adpcm_sample };
-
+    let envelope_sample = apply_volume(adpcm_sample, self.envelope.level);
     let output_l = apply_volume(envelope_sample, self.volume_l);
     let output_r = apply_volume(envelope_sample, self.volume_r);
     (output_l, output_r)
@@ -430,7 +438,7 @@ impl AdsrEnvelope {
       sustain_level: 0,
     }
   }
-  fn clock(&mut self, direction: Direction, rate: ChangeRate, shift: u8) {
+  fn clock(&mut self, direction: Direction, rate: ChangeRate, shift: u8, step: u8) {
     let mut counter_decrement = ENVELOPE_CONTER_MAX >> shift.saturating_sub(11);
 
     if direction == Direction::Increasing && rate == ChangeRate::Exponential && self.level > 0x6000 {
@@ -440,7 +448,8 @@ impl AdsrEnvelope {
     self.counter = self.counter.saturating_sub(counter_decrement);
     if self.counter == 0 {
       self.counter = ENVELOPE_CONTER_MAX;
-      todo!("update envelope")
+      self.update(direction, rate, shift, step);
+      self.check_for_phase_transition();
     }
   }
 
