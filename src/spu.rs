@@ -265,12 +265,12 @@ impl Voice {
         // -     Decay Step        (Fixed, always "-8")
         rate = ChangeRate::Exponential;
         direction = Direction::Decreasing;
-        shift = ((self.adsr1 & 0x0078) >> 3) as u8;
+        shift = ((self.adsr1 & 0x00F0) >> 4) as u8;
         step = 0;
       }
       AdsrPhase::Sustain => {
         // 3-0   Sustain Level     (0..0Fh)  ;Level=(N+1)*800h
-        self.envelope.sustain_level = self.adsr1 & 0x0007;
+        self.envelope.sustain_level = ((self.adsr1 & 0x000F) + 1) * 0x0800;
 
         // 31    Sustain Mode      (0=Linear, 1=Exponential)
         // 30    Sustain Direction (0=Increase, 1=Decrease) (until Key OFF flag)
