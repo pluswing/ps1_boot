@@ -29,7 +29,7 @@ fn main() {
   let mut cpu = Cpu::new(inter);
   let mut event_pump = sdl_context.event_pump().unwrap();
 
-  let mut interval = 1_000_000_000 / 44100;
+  let interval = 1_000_000_000 / 44100;
   let mut now = Instant::now();
   let mut nanos: u128 = 0;
 

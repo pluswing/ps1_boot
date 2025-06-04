@@ -366,7 +366,7 @@ impl Voice {
         } else {
           self.volume_l = (val << 1) as i16;
         }
-        println!("VOICE{} LEFT VOLUME: {:04X}", index, val);
+        println!("VOICE{} LEFT VOLUME: {:04X}", index, self.volume_l);
       }
       0x02 => {
         // 右音量
@@ -376,7 +376,7 @@ impl Voice {
         } else {
           self.volume_r = (val << 1) as i16;
         }
-        println!("VOICE{} RIGHT VOLUME: {:04X}", index, val);
+        println!("VOICE{} RIGHT VOLUME: {:04X}", index, self.volume_r);
       }
       0x04 => {
         // ADPCMサンプルレート
@@ -408,6 +408,7 @@ impl Voice {
   }
 
   fn apply_voice_volume(&self, adpcm_sample: i16) -> (i16, i16) {
+    println!("LEVEL: {:04X}", self.envelope.level);
     let envelope_sample = apply_volume(adpcm_sample, self.envelope.level);
     let output_l = apply_volume(envelope_sample, self.volume_l);
     let output_r = apply_volume(envelope_sample, self.volume_r);
@@ -460,6 +461,8 @@ impl AdsrEnvelope {
     }
     step <<= 11_u8.saturating_sub(shift);
 
+    println!("UPDATE P:{:?} D:{:?} R:{:?} S:{} s:{} SL:{:04X}", self.phase, direction, rate, shift, step, self.sustain_level);
+
     let current_level: i32 = self.level.into();
     if direction == Direction::Decreasing && rate == ChangeRate::Exponential {
       step = (step * current_level) >> 15;
@@ -482,6 +485,7 @@ impl AdsrEnvelope {
     }
 
     if self.phase == AdsrPhase::Decay && (self.level as u16) <= self.sustain_level {
+      println!("***** TO SUATAIN");
       self.phase = AdsrPhase::Sustain;
     }
   }
