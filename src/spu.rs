@@ -1,4 +1,4 @@
-use std::cmp;
+use std::{cmp, collections::VecDeque};
 
 use sdl2::audio::{AudioQueue, AudioSpecDesired};
 
@@ -46,6 +46,8 @@ pub struct Spu {
   main_volume_l: i16,
   main_volume_r: i16,
   write_count: u32, // for debug
+
+  reverb_start_address: u16,
 }
 
 impl Spu {
@@ -67,6 +69,7 @@ impl Spu {
       write_count: 0,
       main_volume_l: 0x7FFF,
       main_volume_r: 0x7FFF,
+      reverb_start_address: 0,
     }
   }
 
@@ -158,6 +161,10 @@ impl Spu {
           println!("MAIN RIGHT VOLUME *CONST* {:04X}", self.main_volume_r);
         }
       }
+      0x01A2 => { // 1F801DA2 Reverb Work Area Start Address in Sound RAM
+        self.reverb_start_address = val;
+      }
+
       _ => {
         // println!("Unhandled SPU store: {:08X}({:04X}) {:04X}", abs_addr, offset, val);
       }
@@ -183,6 +190,11 @@ impl Spu {
 
     let clamped_l = mixed_l.clamp(-0x8000, 0x7FFF) as i16;
     let clamped_r = mixed_r.clamp(-0x8000, 0x7FFF) as i16;
+
+    // voiceのリバーブ有効になったものだけを
+    // self.sound_ram[self.reverb_start_address] に入れる。
+    // self.reverb_start_address += 1
+    // 左と右を一個づつ処理するので、LRを同時に作る必要はない。
 
     let output_l = apply_volume(clamped_l, self.main_volume_l);
     let output_r = apply_volume(clamped_r, self.main_volume_r);
@@ -512,4 +524,34 @@ enum AdsrPhase {
   Decay,
   Sustain,
   Release,
+}
+
+const FIR_FILTER: &[i32; 39] = &[...];
+
+fn push_input_sample(deque: &mut VecDeque<i32>, sample: i32) {
+  if deque.len() == FIR_FILTER.len() {
+    deque.pop_front();
+  }
+  deque.push_back(sample);
+}
+
+fn apply_fir_filter(deque: &VecDeque<i32>) -> i32 {
+  FIR_FILTER.iter().zip(deque)
+    .map(|(&a, &b)| (a * b) >> 15)
+    .sum()
+}
+
+// apply_same_side_reflection(input_sample)
+// apply_different_side_reflection(input_sample)
+
+// # Comb filter generally reads from different locations in the reflection buffers
+// # Each comb filter takes in up to 4 samples
+// comb_out = apply_comb_filter(reflection_buffers)
+
+// # Apply all-pass filters
+// apf1_out = apply_all_pass_filter_1(comb_out)
+// apf2_out = apply_all_pass_filter_2(apf1_out)
+
+fn apply_same_side_reflection(sample: i32) {
+
 }
