@@ -48,6 +48,10 @@ pub struct Spu {
   write_count: u32, // for debug
 
   reverb_start_address: u16,
+  reverb_write_address: u16,
+  reverb_volume_l: i16,
+  reverb_volume_r: i16,
+  reverb_left: bool,
 }
 
 impl Spu {
@@ -70,6 +74,10 @@ impl Spu {
       main_volume_l: 0x7FFF,
       main_volume_r: 0x7FFF,
       reverb_start_address: 0,
+      reverb_write_address: 0,
+      reverb_volume_l: 0,
+      reverb_volume_r: 0,
+      reverb_left: true,
     }
   }
 
@@ -140,6 +148,24 @@ impl Spu {
           }
         }
       }
+      0x0198 => { // 1F801D98 ボイス0～15にリバーブが有効
+        for (i, voice) in self.voices[0..15].iter_mut().enumerate() {
+          let flag = (val & 0x01 << i) != 0;
+          voice.reverb_enabled = flag;
+          if flag {
+            println!("VOICE{} reverb enable", i)
+          }
+        }
+      }
+      0x019A => { // 1F801D9A ボイス16～23にリバーブが有効
+        for (i, voice) in self.voices[15..].iter_mut().enumerate() {
+          let flag = (val & 0x01 << i) != 0;
+          voice.reverb_enabled = flag;
+          if flag {
+            println!("VOICE{} reverb enable", i)
+          }
+        }
+      }
 
       0x0180 => { // 0x1F801D80 メイン左ボリューム
         if val & 0x8000 != 0 {
@@ -163,8 +189,14 @@ impl Spu {
       }
       0x01A2 => { // 1F801DA2 Reverb Work Area Start Address in Sound RAM
         self.reverb_start_address = val;
+        self.reverb_write_address = val;
       }
-
+      0x01FC => { // 0x1F801DFC リバーブ入力ボリューム左
+        self.reverb_volume_l = val as i16;
+      }
+      0x01FE => { // 0x1F801DFE リバーブ入力ボリューム右
+        self.reverb_volume_r = val as i16;
+      }
       _ => {
         // println!("Unhandled SPU store: {:08X}({:04X}) {:04X}", abs_addr, offset, val);
       }
@@ -175,6 +207,7 @@ impl Spu {
 
     let mut mixed_l = 0;
     let mut mixed_r = 0;
+    let mut reverb: i32 = 0;
     for voice in &mut self.voices {
       if !voice.keyed_on {
         continue;
@@ -186,15 +219,24 @@ impl Spu {
       let (voice_sample_l, voice_sample_r) = voice.apply_voice_volume(s);
       mixed_l += i32::from(voice_sample_l);
       mixed_r += i32::from(voice_sample_r);
+
+      if voice.reverb_enabled {
+        reverb += i32::from(if self.reverb_left { voice_sample_l } else { voice_sample_r });
+      }
     }
+    self.reverb_left = !self.reverb_left;
 
     let clamped_l = mixed_l.clamp(-0x8000, 0x7FFF) as i16;
     let clamped_r = mixed_r.clamp(-0x8000, 0x7FFF) as i16;
 
-    // voiceのリバーブ有効になったものだけを
-    // self.sound_ram[self.reverb_start_address] に入れる。
-    // self.reverb_start_address += 1
-    // 左と右を一個づつ処理するので、LRを同時に作る必要はない。
+    let clamped_reverb = reverb.clamp(-0x8000, 0x7FFF) as i16;
+
+    let b0 = clamped_reverb as u8;
+    let b1 = (clamped_reverb >> 8) as u8;
+    self.sound_ram[self.reverb_write_address as usize] = b0;
+    self.reverb_write_address = cmp::max(self.reverb_start_address, self.reverb_write_address.wrapping_add(1));
+    self.sound_ram[self.reverb_write_address as usize] = b1;
+    self.reverb_write_address = cmp::max(self.reverb_start_address, self.reverb_write_address.wrapping_add(1));
 
     let output_l = apply_volume(clamped_l, self.main_volume_l);
     let output_r = apply_volume(clamped_r, self.main_volume_r);
@@ -226,6 +268,8 @@ struct Voice {
   // envelope関連
   adsr1: u16,
   adsr2: u16,
+
+  reverb_enabled: bool,
 }
 
 impl Voice {
@@ -251,6 +295,7 @@ impl Voice {
 
       adsr1: 0,
       adsr2: 0,
+      reverb_enabled: false,
     }
   }
 
