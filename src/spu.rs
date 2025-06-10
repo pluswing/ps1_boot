@@ -47,11 +47,13 @@ pub struct Spu {
   main_volume_r: i16,
   write_count: u32, // for debug
 
-  reverb_start_address: u16,
-  reverb_write_address: u16,
+  reverb_start_address: u32,
+  reverb_write_address: u32,
   reverb_volume_l: i16,
   reverb_volume_r: i16,
   reverb_left: bool,
+  reverb_same_side_ref_addr_left_1: u32,
+  reverb_same_side_ref_addr_left_2: u32,
 }
 
 impl Spu {
@@ -78,6 +80,8 @@ impl Spu {
       reverb_volume_l: 0,
       reverb_volume_r: 0,
       reverb_left: true,
+      reverb_same_side_ref_addr_left_1: 0,
+      reverb_same_side_ref_addr_left_2: 0,
     }
   }
 
@@ -188,8 +192,9 @@ impl Spu {
         }
       }
       0x01A2 => { // 1F801DA2 Reverb Work Area Start Address in Sound RAM
-        self.reverb_start_address = val;
-        self.reverb_write_address = val;
+        self.reverb_start_address = (val as u32) << 3;
+        self.reverb_write_address = self.reverb_start_address;
+        println!("REVERB START ADDR: {:08X}", self.reverb_start_address);
       }
       0x01FC => { // 0x1F801DFC リバーブ入力ボリューム左
         self.reverb_volume_l = val as i16;
@@ -197,6 +202,17 @@ impl Spu {
       0x01FE => { // 0x1F801DFE リバーブ入力ボリューム右
         self.reverb_volume_r = val as i16;
       }
+      0x01D4 => { // 1F801DD4 mLSAME Reverb Same Side Reflection Address 1 Left
+        self.reverb_same_side_ref_addr_left_1 = (val as u32) << 3;
+        println!("SSR ADDR1 = {:08X}", self.reverb_same_side_ref_addr_left_1);
+      }
+      0x01E0 => { // 1F801DE0 dLSAME Reverb Same Side Reflection Address 2 Left
+        self.reverb_same_side_ref_addr_left_2 = (val as u32) << 3;
+        println!("SSR ADDR2 = {:08X}", self.reverb_same_side_ref_addr_left_2);
+      }
+      // 1F801DC4h rev02 vIIR    volume  Reverb Reflection Volume 1
+      // 1F801DCEh rev07 vWALL   volume  Reverb Reflection Volume 2
+
       _ => {
         // println!("Unhandled SPU store: {:08X}({:04X}) {:04X}", abs_addr, offset, val);
       }
@@ -465,7 +481,6 @@ impl Voice {
   }
 
   fn apply_voice_volume(&self, adpcm_sample: i16) -> (i16, i16) {
-    println!("LEVEL: {:04X}", self.envelope.level);
     let envelope_sample = apply_volume(adpcm_sample, self.envelope.level);
     let output_l = apply_volume(envelope_sample, self.volume_l);
     let output_r = apply_volume(envelope_sample, self.volume_r);
@@ -518,8 +533,6 @@ impl AdsrEnvelope {
     }
     step <<= 11_u8.saturating_sub(shift);
 
-    println!("UPDATE P:{:?} D:{:?} R:{:?} S:{} s:{} SL:{:04X}", self.phase, direction, rate, shift, step, self.sustain_level);
-
     let current_level: i32 = self.level.into();
     if direction == Direction::Decreasing && rate == ChangeRate::Exponential {
       step = (step * current_level) >> 15;
@@ -542,7 +555,6 @@ impl AdsrEnvelope {
     }
 
     if self.phase == AdsrPhase::Decay && (self.level as u16) <= self.sustain_level {
-      println!("***** TO SUATAIN");
       self.phase = AdsrPhase::Sustain;
     }
   }
@@ -571,7 +583,13 @@ enum AdsrPhase {
   Release,
 }
 
-const FIR_FILTER: &[i32; 39] = &[...];
+const FIR_FILTER: &[i32; 39] = &[
+  -0x0001, 0x0000, 0x0002, 0x0000, -0x000A, 0x0000, 0x0023, 0x0000,
+  -0x0067, 0x0000, 0x010A, 0x0000, -0x0268, 0x0000, 0x0534, 0x0000,
+  -0x0B90, 0x0000, 0x2806, 0x4000, 0x2806, 0x0000, -0x0B90, 0x0000,
+   0x0534, 0x0000, -0x0268, 0x0000, 0x010A, 0x0000, -0x0067, 0x0000,
+   0x0023, 0x0000, -0x000A, 0x0000, 0x0002, 0x0000, -0x0001,
+];
 
 fn push_input_sample(deque: &mut VecDeque<i32>, sample: i32) {
   if deque.len() == FIR_FILTER.len() {
@@ -586,7 +604,10 @@ fn apply_fir_filter(deque: &VecDeque<i32>) -> i32 {
     .sum()
 }
 
-// apply_same_side_reflection(input_sample)
+// fn apply_same_side_reflection(input_sample) {
+//   // ram[m_addr] = (input_sample + ram[d_addr] * vWALL - ram[m_addr - 2]) * vIIR + ram[m_addr - 2]
+// }
+
 // apply_different_side_reflection(input_sample)
 
 // # Comb filter generally reads from different locations in the reflection buffers
