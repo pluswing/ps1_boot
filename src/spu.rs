@@ -52,8 +52,11 @@ pub struct Spu {
   reverb_volume_l: i16,
   reverb_volume_r: i16,
   reverb_left: bool,
-  reverb_same_side_ref_addr_left_1: u32,
-  reverb_same_side_ref_addr_left_2: u32,
+
+  mlsame: u32,
+  dlsame: u32,
+  vwall: i16,
+  viir: i16,
 }
 
 impl Spu {
@@ -80,8 +83,10 @@ impl Spu {
       reverb_volume_l: 0,
       reverb_volume_r: 0,
       reverb_left: true,
-      reverb_same_side_ref_addr_left_1: 0,
-      reverb_same_side_ref_addr_left_2: 0,
+      mlsame: 0,
+      dlsame: 0,
+      vwall: 0,
+      viir: 0,
     }
   }
 
@@ -191,7 +196,7 @@ impl Spu {
           println!("MAIN RIGHT VOLUME *CONST* {:04X}", self.main_volume_r);
         }
       }
-      0x01A2 => { // 1F801DA2 Reverb Work Area Start Address in Sound RAM
+      0x01A2 => { // 1F801DA2 mBASE Reverb Work Area Start Address in Sound RAM
         self.reverb_start_address = (val as u32) << 3;
         self.reverb_write_address = self.reverb_start_address;
         println!("REVERB START ADDR: {:08X}", self.reverb_start_address);
@@ -203,15 +208,19 @@ impl Spu {
         self.reverb_volume_r = val as i16;
       }
       0x01D4 => { // 1F801DD4 mLSAME Reverb Same Side Reflection Address 1 Left
-        self.reverb_same_side_ref_addr_left_1 = (val as u32) << 3;
-        println!("SSR ADDR1 = {:08X}", self.reverb_same_side_ref_addr_left_1);
+        self.mlsame = (val as u32) << 3;
+        println!("SSR ADDR1 = {:08X}", self.mlsame);
       }
       0x01E0 => { // 1F801DE0 dLSAME Reverb Same Side Reflection Address 2 Left
-        self.reverb_same_side_ref_addr_left_2 = (val as u32) << 3;
-        println!("SSR ADDR2 = {:08X}", self.reverb_same_side_ref_addr_left_2);
+        self.dlsame = (val as u32) << 3;
+        println!("SSR ADDR2 = {:08X}", self.dlsame);
       }
-      // 1F801DC4h rev02 vIIR    volume  Reverb Reflection Volume 1
-      // 1F801DCEh rev07 vWALL   volume  Reverb Reflection Volume 2
+      0x01C4 => { // 1F801DC4h rev02 vIIR    volume  Reverb Reflection Volume 1
+        self.viir = val as i16;
+      }
+      0x01CE => { // 1F801DCEh rev07 vWALL   volume  Reverb Reflection Volume 2
+        self.vwall = val as i16;
+      }
 
       _ => {
         // println!("Unhandled SPU store: {:08X}({:04X}) {:04X}", abs_addr, offset, val);
@@ -240,7 +249,6 @@ impl Spu {
         reverb += i32::from(if self.reverb_left { voice_sample_l } else { voice_sample_r });
       }
     }
-    self.reverb_left = !self.reverb_left;
 
     let clamped_l = mixed_l.clamp(-0x8000, 0x7FFF) as i16;
     let clamped_r = mixed_r.clamp(-0x8000, 0x7FFF) as i16;
@@ -254,9 +262,46 @@ impl Spu {
     self.sound_ram[self.reverb_write_address as usize] = b1;
     self.reverb_write_address = cmp::max(self.reverb_start_address, self.reverb_write_address.wrapping_add(1));
 
+    // reverb
+    let input_sample = if self.reverb_left { clamped_l } else { clamped_r };
+    // 同じ側​​のL
+    self.apply_same_side_reflection(input_sample, self.mlsame, self.dlsame);
+    // 同じ側​​のR
+    // self.apply_same_side_reflection(input_sample, self.mRSAME, self.dRSAME);
+    // // 異なる側LからR
+    // self.apply_same_side_reflection(input_sample, self.mRDIFF, self.dLDIFF);
+    // // 異なる側のRからL
+    // self.apply_same_side_reflection(input_sample, self.mLDIFF, self.dRDIFF);
+
+    self.reverb_left = !self.reverb_left;
+
     let output_l = apply_volume(clamped_l, self.main_volume_l);
     let output_r = apply_volume(clamped_r, self.main_volume_r);
     self.device.queue_audio(&[output_l, output_r]).unwrap()
+  }
+
+  fn loadi16(&self, offset: u32) -> i16 {
+    let offset = offset as usize;
+
+    let b0 = self.sound_ram[offset + 0] as u16;
+    let b1 = self.sound_ram[offset + 1] as u16;
+
+    (b0 | (b1 << 8)) as i16
+  }
+
+  fn store16(&mut self, offset: u32, val: u16) {
+    let offset = offset as usize;
+
+    let b0 = val as u8;
+    let b1 = (val >> 8) as u8;
+
+    self.sound_ram[offset + 0] = b0;
+    self.sound_ram[offset + 1] = b1;
+  }
+
+  fn apply_same_side_reflection(&mut self, input_sample: i16, m_addr: u32, d_addr: u32) {
+    let val = (input_sample + self.loadi16(d_addr) * self.vwall - self.loadi16(m_addr - 2)) * self.viir + self.loadi16(m_addr - 2);
+    self.store16(m_addr, val as u16);
   }
 }
 
@@ -604,9 +649,7 @@ fn apply_fir_filter(deque: &VecDeque<i32>) -> i32 {
     .sum()
 }
 
-// fn apply_same_side_reflection(input_sample) {
-//   // ram[m_addr] = (input_sample + ram[d_addr] * vWALL - ram[m_addr - 2]) * vIIR + ram[m_addr - 2]
-// }
+
 
 // apply_different_side_reflection(input_sample)
 
@@ -617,7 +660,3 @@ fn apply_fir_filter(deque: &VecDeque<i32>) -> i32 {
 // # Apply all-pass filters
 // apf1_out = apply_all_pass_filter_1(comb_out)
 // apf2_out = apply_all_pass_filter_2(apf1_out)
-
-fn apply_same_side_reflection(sample: i32) {
-
-}
