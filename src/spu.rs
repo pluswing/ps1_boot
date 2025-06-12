@@ -55,6 +55,12 @@ pub struct Spu {
 
   mlsame: u32,
   dlsame: u32,
+  mrsame: u32,
+  drsame: u32,
+  mrdiff: u32,
+  dldiff: u32,
+  mldiff: u32,
+  drdiff: u32,
   vwall: i16,
   viir: i16,
 }
@@ -85,6 +91,12 @@ impl Spu {
       reverb_left: true,
       mlsame: 0,
       dlsame: 0,
+      mrsame: 0,
+      drsame: 0,
+      mrdiff: 0,
+      dldiff: 0,
+      mldiff: 0,
+      drdiff: 0,
       vwall: 0,
       viir: 0,
     }
@@ -112,8 +124,7 @@ impl Spu {
       }
       0x01A8 => { // 1F801DA8
         // サウンド RAM データ ポート (16 ビット)
-        self.sound_ram[self.sound_ram_start_address as usize] = val as u8;
-        self.sound_ram[(self.sound_ram_start_address + 1) as usize] = (val >> 8) as u8;
+        self.store16(self.sound_ram_start_address, val);
         self.sound_ram_start_address = self.sound_ram_start_address + 2;
         self.write_count = self.write_count + 1;
       }
@@ -215,6 +226,25 @@ impl Spu {
         self.dlsame = (val as u32) << 3;
         println!("SSR ADDR2 = {:08X}", self.dlsame);
       }
+      0x01D6 => { // 1F801DD6h rev0B mRSAME  src/dst Reverb Same Side Reflection Address 1 Right
+        self.mrsame = (val as u32) << 3;
+      }
+      0x01E2 => { // 1F801DE2h rev11 dRSAME  src     Reverb Same Side Reflection Address 2 Right
+        self.drsame = (val as u32) << 3;
+      }
+      0x01E6 => { // 1F801DE6h rev13 mRDIFF  src/dst Reverb Different Side Reflect Address 1 Right
+        self.mrdiff = (val as u32) << 3;
+      }
+      0x01F0 => { // 1F801DF0h rev18 dLDIFF  src     Reverb Different Side Reflect Address 2 Left
+        self.dldiff = (val as u32) << 3;
+      }
+      0x01E4 => { // 1F801DE4h rev12 mLDIFF  src/dst Reverb Different Side Reflect Address 1 Left
+        self.mldiff = (val as u32) << 3;
+      }
+      0x01F2 => { // 1F801DF2h rev19 dRDIFF  src     Reverb Different Side Reflect Address 2 Right
+        self.drdiff = (val as u32) << 3;
+      }
+
       0x01C4 => { // 1F801DC4h rev02 vIIR    volume  Reverb Reflection Volume 1
         self.viir = val as i16;
       }
@@ -222,6 +252,29 @@ impl Spu {
         self.vwall = val as i16;
       }
 
+      // COMB
+      // 1F801DC6h rev03 vCOMB1  volume  Reverb Comb Volume 1
+      // 1F801DC8h rev04 vCOMB2  volume  Reverb Comb Volume 2
+      // 1F801DCAh rev05 vCOMB3  volume  Reverb Comb Volume 3
+      // 1F801DCCh rev06 vCOMB4  volume  Reverb Comb Volume 4
+      // 1F801DD8h rev0C mLCOMB1 src     Reverb Comb Address 1 Left
+      // 1F801DDAh rev0D mRCOMB1 src     Reverb Comb Address 1 Right
+      // 1F801DDCh rev0E mLCOMB2 src     Reverb Comb Address 2 Left
+      // 1F801DDEh rev0F mRCOMB2 src     Reverb Comb Address 2 Right
+      // 1F801DE8h rev14 mLCOMB3 src     Reverb Comb Address 3 Left
+      // 1F801DEAh rev15 mRCOMB3 src     Reverb Comb Address 3 Right
+      // 1F801DECh rev16 mLCOMB4 src     Reverb Comb Address 4 Left
+      // 1F801DEEh rev17 mRCOMB4 src     Reverb Comb Address 4 Right
+
+      // APF
+      // 1F801DC0h rev00 dAPF1   disp    Reverb APF Offset 1
+      // 1F801DC2h rev01 dAPF2   disp    Reverb APF Offset 2
+      // 1F801DD0h rev08 vAPF1   volume  Reverb APF Volume 1
+      // 1F801DD2h rev09 vAPF2   volume  Reverb APF Volume 2
+      // 1F801DF4h rev1A mLAPF1  src/dst Reverb APF Address 1 Left
+      // 1F801DF6h rev1B mRAPF1  src/dst Reverb APF Address 1 Right
+      // 1F801DF8h rev1C mLAPF2  src/dst Reverb APF Address 2 Left
+      // 1F801DFAh rev1D mRAPF2  src/dst Reverb APF Address 2 Right
       _ => {
         // println!("Unhandled SPU store: {:08X}({:04X}) {:04X}", abs_addr, offset, val);
       }
@@ -267,11 +320,11 @@ impl Spu {
     // 同じ側​​のL
     self.apply_same_side_reflection(input_sample, self.mlsame, self.dlsame);
     // 同じ側​​のR
-    // self.apply_same_side_reflection(input_sample, self.mRSAME, self.dRSAME);
+    self.apply_same_side_reflection(input_sample, self.mrsame, self.drsame);
     // // 異なる側LからR
-    // self.apply_same_side_reflection(input_sample, self.mRDIFF, self.dLDIFF);
+    self.apply_same_side_reflection(input_sample, self.mrdiff, self.dldiff);
     // // 異なる側のRからL
-    // self.apply_same_side_reflection(input_sample, self.mLDIFF, self.dRDIFF);
+    self.apply_same_side_reflection(input_sample, self.mldiff, self.drdiff);
 
     self.reverb_left = !self.reverb_left;
 
@@ -300,7 +353,10 @@ impl Spu {
   }
 
   fn apply_same_side_reflection(&mut self, input_sample: i16, m_addr: u32, d_addr: u32) {
-    let val = (input_sample + self.loadi16(d_addr) * self.vwall - self.loadi16(m_addr - 2)) * self.viir + self.loadi16(m_addr - 2);
+    if m_addr == 0 {
+      return
+    }
+    let val = ((input_sample as i32 + self.loadi16(d_addr) as i32 * self.vwall as i32 - self.loadi16(m_addr - 2) as i32) * self.viir as i32 + self.loadi16(m_addr - 2) as i32) as i16;
     self.store16(m_addr, val as u16);
   }
 }
