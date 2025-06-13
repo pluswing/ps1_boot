@@ -63,6 +63,18 @@ pub struct Spu {
   drdiff: u32,
   vwall: i16,
   viir: i16,
+  vcomb1: i16,
+  vcomb2: i16,
+  vcomb3: i16,
+  vcomb4: i16,
+  mlcomb1: u32,
+  mlcomb2: u32,
+  mlcomb3: u32,
+  mlcomb4: u32,
+  mrcomb1: u32,
+  mrcomb2: u32,
+  mrcomb3: u32,
+  mrcomb4: u32,
 }
 
 impl Spu {
@@ -99,6 +111,18 @@ impl Spu {
       drdiff: 0,
       vwall: 0,
       viir: 0,
+      vcomb1: 0,
+      vcomb2: 0,
+      vcomb3: 0,
+      vcomb4: 0,
+      mlcomb1: 0,
+      mlcomb2: 0,
+      mlcomb3: 0,
+      mlcomb4: 0,
+      mrcomb1: 0,
+      mrcomb2: 0,
+      mrcomb3: 0,
+      mrcomb4: 0,
     }
   }
 
@@ -253,18 +277,42 @@ impl Spu {
       }
 
       // COMB
-      // 1F801DC6h rev03 vCOMB1  volume  Reverb Comb Volume 1
-      // 1F801DC8h rev04 vCOMB2  volume  Reverb Comb Volume 2
-      // 1F801DCAh rev05 vCOMB3  volume  Reverb Comb Volume 3
-      // 1F801DCCh rev06 vCOMB4  volume  Reverb Comb Volume 4
-      // 1F801DD8h rev0C mLCOMB1 src     Reverb Comb Address 1 Left
-      // 1F801DDAh rev0D mRCOMB1 src     Reverb Comb Address 1 Right
-      // 1F801DDCh rev0E mLCOMB2 src     Reverb Comb Address 2 Left
-      // 1F801DDEh rev0F mRCOMB2 src     Reverb Comb Address 2 Right
-      // 1F801DE8h rev14 mLCOMB3 src     Reverb Comb Address 3 Left
-      // 1F801DEAh rev15 mRCOMB3 src     Reverb Comb Address 3 Right
-      // 1F801DECh rev16 mLCOMB4 src     Reverb Comb Address 4 Left
-      // 1F801DEEh rev17 mRCOMB4 src     Reverb Comb Address 4 Right
+      0x01C6 => { // 1F801DC6h rev03 vCOMB1  volume  Reverb Comb Volume 1
+        self.vcomb1 = val as i16;
+      }
+      0x01C8 => { // 1F801DC8h rev04 vCOMB2  volume  Reverb Comb Volume 2
+        self.vcomb2 = val as i16;
+      }
+      0x01CA => { // 1F801DCAh rev05 vCOMB3  volume  Reverb Comb Volume 3
+        self.vcomb3 = val as i16;
+      }
+      0x01CC => { // 1F801DCCh rev06 vCOMB4  volume  Reverb Comb Volume 4
+        self.vcomb4 = val as i16;
+      }
+      0x01D8 => { // 1F801DD8h rev0C mLCOMB1 src     Reverb Comb Address 1 Left
+        self.mlcomb1 = (val as u32) << 3;
+      }
+      0x01DA => { // 1F801DDAh rev0D mRCOMB1 src     Reverb Comb Address 1 Right
+        self.mrcomb1 = (val as u32) << 3;
+      }
+      0x01DC => { // 1F801DDCh rev0E mLCOMB2 src     Reverb Comb Address 2 Left
+        self.mlcomb2 = (val as u32) << 3;
+      }
+      0x01DE => { // 1F801DDEh rev0F mRCOMB2 src     Reverb Comb Address 2 Right
+        self.mrcomb2 = (val as u32) << 3;
+      }
+      0x01E8 => { // 1F801DE8h rev14 mLCOMB3 src     Reverb Comb Address 3 Left
+        self.mlcomb3 = (val as u32) << 3;
+      }
+      0x01EA => { // 1F801DEAh rev15 mRCOMB3 src     Reverb Comb Address 3 Right
+        self.mrcomb3 = (val as u32) << 3;
+      }
+      0x01EC => { // 1F801DECh rev16 mLCOMB4 src     Reverb Comb Address 4 Left
+        self.mlcomb4 = (val as u32) << 3;
+      }
+      0x01EE => { // 1F801DEEh rev17 mRCOMB4 src     Reverb Comb Address 4 Right
+        self.mrcomb4 = (val as u32) << 3;
+      }
 
       // APF
       // 1F801DC0h rev00 dAPF1   disp    Reverb APF Offset 1
@@ -326,6 +374,8 @@ impl Spu {
     // // 異なる側のRからL
     self.apply_same_side_reflection(input_sample, self.mldiff, self.drdiff);
 
+    let comb_out = self.apply_comb_filter();
+
     self.reverb_left = !self.reverb_left;
 
     let output_l = apply_volume(clamped_l, self.main_volume_l);
@@ -358,6 +408,31 @@ impl Spu {
     }
     let val = ((input_sample as i32 + self.loadi16(d_addr) as i32 * self.vwall as i32 - self.loadi16(m_addr - 2) as i32) * self.viir as i32 + self.loadi16(m_addr - 2) as i32) as i16;
     self.store16(m_addr, val as u16);
+  }
+
+  fn apply_comb_filter(&mut self) -> i16 {
+    let comb1 = self.loadi16(if self.reverb_left { self.mlcomb1 } else { self.mrcomb1 });
+    let comb2 = self.loadi16(if self.reverb_left { self.mlcomb2 } else { self.mrcomb2 });
+    let comb3 = self.loadi16(if self.reverb_left { self.mlcomb3 } else { self.mrcomb3 });
+    let comb4 = self.loadi16(if self.reverb_left { self.mlcomb4 } else { self.mrcomb4 });
+    let out = self.vcomb1 * comb1 + self.vcomb2 * comb2 + self.vcomb3 * comb3 + self.vcomb4 * comb4;
+    out
+  }
+
+  fn apply_all_pass_filter_1(&mut self, input_sample: i16) -> i16 {
+    let mapf = if self.reverb_left { self.mlapf1 } else { self.mrapf1 };
+    let buffered = input_sample - self.vapf * self.loadi16(mapf - self.dapf);
+    self.store16(mapf, buffered);
+    let apf_out = self.vapf * buffered + self.loadi16(mapf - self.dapf);
+    apf_out
+  }
+
+  fn apply_all_pass_filter_2(&mut self, input_sample: i16) -> i16 {
+    let mapf = if self.reverb_left { self.mlapf2 } else { self.mrapf2 };
+    let buffered = input_sample - self.vapf * self.loadi16(mapf - self.dapf);
+    self.store16(mapf, buffered);
+    let apf_out = self.vapf * buffered + self.loadi16(mapf - self.dapf);
+    apf_out
   }
 }
 
@@ -704,15 +779,3 @@ fn apply_fir_filter(deque: &VecDeque<i32>) -> i32 {
     .map(|(&a, &b)| (a * b) >> 15)
     .sum()
 }
-
-
-
-// apply_different_side_reflection(input_sample)
-
-// # Comb filter generally reads from different locations in the reflection buffers
-// # Each comb filter takes in up to 4 samples
-// comb_out = apply_comb_filter(reflection_buffers)
-
-// # Apply all-pass filters
-// apf1_out = apply_all_pass_filter_1(comb_out)
-// apf2_out = apply_all_pass_filter_2(apf1_out)
