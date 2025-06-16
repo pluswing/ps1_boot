@@ -75,6 +75,16 @@ pub struct Spu {
   mrcomb2: u32,
   mrcomb3: u32,
   mrcomb4: u32,
+  dapf1: u32,
+  dapf2: u32,
+  vapf1: i16,
+  vapf2: i16,
+  mlapf1: u32,
+  mlapf2: u32,
+  mrapf1: u32,
+  mrapf2: u32,
+
+  far_input: VecDeque<i16>,
 }
 
 impl Spu {
@@ -123,6 +133,15 @@ impl Spu {
       mrcomb2: 0,
       mrcomb3: 0,
       mrcomb4: 0,
+      dapf1: 0,
+      dapf2: 0,
+      vapf1: 0,
+      vapf2: 0,
+      mlapf1: 0,
+      mlapf2: 0,
+      mrapf1: 0,
+      mrapf2: 0,
+      far_input: VecDeque::new(),
     }
   }
 
@@ -315,14 +334,30 @@ impl Spu {
       }
 
       // APF
-      // 1F801DC0h rev00 dAPF1   disp    Reverb APF Offset 1
-      // 1F801DC2h rev01 dAPF2   disp    Reverb APF Offset 2
-      // 1F801DD0h rev08 vAPF1   volume  Reverb APF Volume 1
-      // 1F801DD2h rev09 vAPF2   volume  Reverb APF Volume 2
-      // 1F801DF4h rev1A mLAPF1  src/dst Reverb APF Address 1 Left
-      // 1F801DF6h rev1B mRAPF1  src/dst Reverb APF Address 1 Right
-      // 1F801DF8h rev1C mLAPF2  src/dst Reverb APF Address 2 Left
-      // 1F801DFAh rev1D mRAPF2  src/dst Reverb APF Address 2 Right
+      0x01C0 => { // 1F801DC0h rev00 dAPF1   disp    Reverb APF Offset 1
+        self.dapf1 = (val as u32) << 3;
+      }
+      0x01C2 => { // 1F801DC2h rev01 dAPF2   disp    Reverb APF Offset 2
+        self.dapf2 = (val as u32) << 3;
+      }
+      0x01D0 => { // 1F801DD0h rev08 vAPF1   volume  Reverb APF Volume 1
+        self.vapf1 = val as i16;
+      }
+      0x01D2 => { // 1F801DD2h rev09 vAPF2   volume  Reverb APF Volume 2
+        self.vapf2 = val as i16;
+      }
+      0x01F4 => { // 1F801DF4h rev1A mLAPF1  src/dst Reverb APF Address 1 Left
+        self.mlapf1 = (val as u32) << 3;
+      }
+      0x01F6 => { // 1F801DF6h rev1B mRAPF1  src/dst Reverb APF Address 1 Right
+        self.mrapf1 = (val as u32) << 3;
+      }
+      0x01F8 => { // 1F801DF8h rev1C mLAPF2  src/dst Reverb APF Address 2 Left
+        self.mlapf2 = (val as u32) << 3;
+      }
+      0x01FA => { // 1F801DFAh rev1D mRAPF2  src/dst Reverb APF Address 2 Right
+        self.mrapf2 = (val as u32) << 3;
+      }
       _ => {
         // println!("Unhandled SPU store: {:08X}({:04X}) {:04X}", abs_addr, offset, val);
       }
@@ -356,12 +391,11 @@ impl Spu {
 
     let clamped_reverb = reverb.clamp(-0x8000, 0x7FFF) as i16;
 
-    let b0 = clamped_reverb as u8;
-    let b1 = (clamped_reverb >> 8) as u8;
-    self.sound_ram[self.reverb_write_address as usize] = b0;
-    self.reverb_write_address = cmp::max(self.reverb_start_address, self.reverb_write_address.wrapping_add(1));
-    self.sound_ram[self.reverb_write_address as usize] = b1;
-    self.reverb_write_address = cmp::max(self.reverb_start_address, self.reverb_write_address.wrapping_add(1));
+    self.store16(self.reverb_write_address, clamped_reverb as u16);
+    self.reverb_write_address = self.reverb_write_address.wrapping_add(2);
+    if self.reverb_write_address > 0xFFFF {
+      self.reverb_write_address = self.reverb_start_address;
+    }
 
     // reverb
     let input_sample = if self.reverb_left { clamped_l } else { clamped_r };
@@ -375,8 +409,17 @@ impl Spu {
     self.apply_same_side_reflection(input_sample, self.mldiff, self.drdiff);
 
     let comb_out = self.apply_comb_filter();
+    let apf1_out = self.apply_all_pass_filter_1(comb_out);
+    let apf2_out = self.apply_all_pass_filter_2(apf1_out);
+    // apf2_out
+
+    // push_input_sample(&mut self.far_input, apf2_out);
+    // apply_fir_filter(self.far_input);
 
     self.reverb_left = !self.reverb_left;
+
+    // clamped_l += apf2_out(L);
+    // clamped_r += apf2_out(R);
 
     let output_l = apply_volume(clamped_l, self.main_volume_l);
     let output_r = apply_volume(clamped_r, self.main_volume_r);
@@ -421,17 +464,17 @@ impl Spu {
 
   fn apply_all_pass_filter_1(&mut self, input_sample: i16) -> i16 {
     let mapf = if self.reverb_left { self.mlapf1 } else { self.mrapf1 };
-    let buffered = input_sample - self.vapf * self.loadi16(mapf - self.dapf);
-    self.store16(mapf, buffered);
-    let apf_out = self.vapf * buffered + self.loadi16(mapf - self.dapf);
+    let buffered = input_sample - self.vapf1 * self.loadi16(mapf - self.dapf1);
+    self.store16(mapf, buffered as u16);
+    let apf_out = self.vapf1 * buffered + self.loadi16(mapf - self.dapf1);
     apf_out
   }
 
   fn apply_all_pass_filter_2(&mut self, input_sample: i16) -> i16 {
     let mapf = if self.reverb_left { self.mlapf2 } else { self.mrapf2 };
-    let buffered = input_sample - self.vapf * self.loadi16(mapf - self.dapf);
-    self.store16(mapf, buffered);
-    let apf_out = self.vapf * buffered + self.loadi16(mapf - self.dapf);
+    let buffered = input_sample - self.vapf2 * self.loadi16(mapf - self.dapf2);
+    self.store16(mapf, buffered as u16);
+    let apf_out = self.vapf2 * buffered + self.loadi16(mapf - self.dapf2);
     apf_out
   }
 }
