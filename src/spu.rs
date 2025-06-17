@@ -49,8 +49,10 @@ pub struct Spu {
 
   reverb_start_address: u32,
   reverb_write_address: u32,
-  reverb_volume_l: i16,
-  reverb_volume_r: i16,
+  reverb_output_volume_l: i16,
+  reverb_output_volume_r: i16,
+  reverb_input_volume_l: i16,
+  reverb_input_volume_r: i16,
   reverb_left: bool,
 
   mlsame: u32,
@@ -84,7 +86,8 @@ pub struct Spu {
   mrapf1: u32,
   mrapf2: u32,
 
-  far_input: VecDeque<i16>,
+  far_input_l: VecDeque<i16>,
+  far_input_r: VecDeque<i16>,
 }
 
 impl Spu {
@@ -108,8 +111,10 @@ impl Spu {
       main_volume_r: 0x7FFF,
       reverb_start_address: 0,
       reverb_write_address: 0,
-      reverb_volume_l: 0,
-      reverb_volume_r: 0,
+      reverb_output_volume_l: 0,
+      reverb_output_volume_r: 0,
+      reverb_input_volume_l: 0,
+      reverb_input_volume_r: 0,
       reverb_left: true,
       mlsame: 0,
       dlsame: 0,
@@ -141,7 +146,8 @@ impl Spu {
       mlapf2: 0,
       mrapf1: 0,
       mrapf2: 0,
-      far_input: VecDeque::new(),
+      far_input_l: VecDeque::new(),
+      far_input_r: VecDeque::new(),
     }
   }
 
@@ -176,7 +182,6 @@ impl Spu {
         for (i, voice) in self.voices[0..15].iter_mut().enumerate() {
           let flag = (val & 0x01 << i) != 0;
           if flag {
-            println!("VOICE KEY ON[{}]", i);
             voice.key_on(&self.sound_ram);
           }
         }
@@ -186,7 +191,6 @@ impl Spu {
         for (i, voice) in self.voices[15..].iter_mut().enumerate() {
           let flag = (val & 0x01 << i) != 0;
           if flag {
-            println!("VOICE KEY ON[{}]", i+15);
             voice.key_on(&self.sound_ram);
           }
         }
@@ -196,7 +200,6 @@ impl Spu {
         for (i, voice) in self.voices[0..15].iter_mut().enumerate() {
           let flag = (val & 0x01 << i) != 0;
           if flag {
-            println!("VOICE KEY OFF[{}]", i);
             voice.key_off();
           }
         }
@@ -206,7 +209,6 @@ impl Spu {
         for (i, voice) in self.voices[15..].iter_mut().enumerate() {
           let flag = (val & 0x01 << i) != 0;
           if flag {
-            println!("VOICE KEY OFF[{}]", i+15);
             voice.key_off();
           }
         }
@@ -215,59 +217,52 @@ impl Spu {
         for (i, voice) in self.voices[0..15].iter_mut().enumerate() {
           let flag = (val & 0x01 << i) != 0;
           voice.reverb_enabled = flag;
-          if flag {
-            println!("VOICE{} reverb enable", i)
-          }
         }
       }
       0x019A => { // 1F801D9A ボイス16～23にリバーブが有効
         for (i, voice) in self.voices[15..].iter_mut().enumerate() {
           let flag = (val & 0x01 << i) != 0;
           voice.reverb_enabled = flag;
-          if flag {
-            println!("VOICE{} reverb enable", i)
-          }
         }
       }
 
       0x0180 => { // 0x1F801D80 メイン左ボリューム
         if val & 0x8000 != 0 {
           // エンベロープ有効
-          println!("MAIN LEFT VOLUME *ENVELOPE* {:04X}", val)
         } else {
           // 一定音量
           self.main_volume_l = (val << 1) as i16;
-          println!("MAIN LEFT VOLUME *CONST* {:04X}", self.main_volume_l);
         }
       }
       0x0182 => { // 0x1F801D82 メイン右ボリューム
         if val & 0x8000 != 0 {
           // エンベロープ有効
-          println!("MAIN RIGHT VOLUME *ENVELOPE* {:04X}", val)
         } else {
           // 一定音量
           self.main_volume_r = (val << 1) as i16;
-          println!("MAIN RIGHT VOLUME *CONST* {:04X}", self.main_volume_r);
         }
+      }
+      0x0184 => { // 1F801D84h spu   vLOUT   volume  Reverb Output Volume Left
+        self.reverb_output_volume_l = val as i16;
+      }
+      0x0186 => { // 1F801D86h spu   vROUT   volume  Reverb Output Volume Right
+        self.reverb_output_volume_r = val as i16;
       }
       0x01A2 => { // 1F801DA2 mBASE Reverb Work Area Start Address in Sound RAM
         self.reverb_start_address = (val as u32) << 3;
         self.reverb_write_address = self.reverb_start_address;
-        println!("REVERB START ADDR: {:08X}", self.reverb_start_address);
       }
       0x01FC => { // 0x1F801DFC リバーブ入力ボリューム左
-        self.reverb_volume_l = val as i16;
+        self.reverb_input_volume_l = val as i16;
       }
       0x01FE => { // 0x1F801DFE リバーブ入力ボリューム右
-        self.reverb_volume_r = val as i16;
+        self.reverb_input_volume_r = val as i16;
       }
       0x01D4 => { // 1F801DD4 mLSAME Reverb Same Side Reflection Address 1 Left
         self.mlsame = (val as u32) << 3;
-        println!("SSR ADDR1 = {:08X}", self.mlsame);
       }
       0x01E0 => { // 1F801DE0 dLSAME Reverb Same Side Reflection Address 2 Left
         self.dlsame = (val as u32) << 3;
-        println!("SSR ADDR2 = {:08X}", self.dlsame);
       }
       0x01D6 => { // 1F801DD6h rev0B mRSAME  src/dst Reverb Same Side Reflection Address 1 Right
         self.mrsame = (val as u32) << 3;
@@ -399,9 +394,9 @@ impl Spu {
 
     // reverb
     let input_sample = if self.reverb_left { clamped_l } else { clamped_r };
-    // 同じ側​​のL
+    // 同じ側のL
     self.apply_same_side_reflection(input_sample, self.mlsame, self.dlsame);
-    // 同じ側​​のR
+    // 同じ側のR
     self.apply_same_side_reflection(input_sample, self.mrsame, self.drsame);
     // // 異なる側LからR
     self.apply_same_side_reflection(input_sample, self.mrdiff, self.dldiff);
@@ -411,18 +406,22 @@ impl Spu {
     let comb_out = self.apply_comb_filter();
     let apf1_out = self.apply_all_pass_filter_1(comb_out);
     let apf2_out = self.apply_all_pass_filter_2(apf1_out);
-    // apf2_out
+    if self.reverb_left {
+      push_input_sample(&mut self.far_input_l, apf2_out);
+    } else {
+      push_input_sample(&mut self.far_input_r, apf2_out);
+    }
 
-    // push_input_sample(&mut self.far_input, apf2_out);
-    // apply_fir_filter(self.far_input);
+    let reverb_l = apply_fir_filter(&self.far_input_l);
+    let reverb_r = apply_fir_filter(&self.far_input_r);
 
     self.reverb_left = !self.reverb_left;
 
-    // clamped_l += apf2_out(L);
-    // clamped_r += apf2_out(R);
+    let with_reverb_l = clamped_l + reverb_l;
+    let with_reverb_r = clamped_r + reverb_r;
 
-    let output_l = apply_volume(clamped_l, self.main_volume_l);
-    let output_r = apply_volume(clamped_r, self.main_volume_r);
+    let output_l = apply_volume(with_reverb_l, self.main_volume_l);
+    let output_r = apply_volume(with_reverb_r, self.main_volume_r);
     self.device.queue_audio(&[output_l, output_r]).unwrap()
   }
 
@@ -658,7 +657,6 @@ impl Voice {
         } else {
           self.volume_l = (val << 1) as i16;
         }
-        println!("VOICE{} LEFT VOLUME: {:04X}", index, self.volume_l);
       }
       0x02 => {
         // 右音量
@@ -668,7 +666,6 @@ impl Voice {
         } else {
           self.volume_r = (val << 1) as i16;
         }
-        println!("VOICE{} RIGHT VOLUME: {:04X}", index, self.volume_r);
       }
       0x04 => {
         // ADPCMサンプルレート
@@ -802,7 +799,7 @@ enum AdsrPhase {
   Release,
 }
 
-const FIR_FILTER: &[i32; 39] = &[
+const FIR_FILTER: &[i16; 39] = &[
   -0x0001, 0x0000, 0x0002, 0x0000, -0x000A, 0x0000, 0x0023, 0x0000,
   -0x0067, 0x0000, 0x010A, 0x0000, -0x0268, 0x0000, 0x0534, 0x0000,
   -0x0B90, 0x0000, 0x2806, 0x4000, 0x2806, 0x0000, -0x0B90, 0x0000,
@@ -810,15 +807,15 @@ const FIR_FILTER: &[i32; 39] = &[
    0x0023, 0x0000, -0x000A, 0x0000, 0x0002, 0x0000, -0x0001,
 ];
 
-fn push_input_sample(deque: &mut VecDeque<i32>, sample: i32) {
+fn push_input_sample(deque: &mut VecDeque<i16>, sample: i16) {
   if deque.len() == FIR_FILTER.len() {
     deque.pop_front();
   }
   deque.push_back(sample);
 }
 
-fn apply_fir_filter(deque: &VecDeque<i32>) -> i32 {
+fn apply_fir_filter(deque: &VecDeque<i16>) -> i16 {
   FIR_FILTER.iter().zip(deque)
-    .map(|(&a, &b)| (a * b) >> 15)
+    .map(|(&a, &b)| ((a as i32 * b as i32) >> 15) as i16)
     .sum()
 }
