@@ -388,7 +388,7 @@ impl Spu {
 
     self.store16(self.reverb_write_address, clamped_reverb as u16);
     self.reverb_write_address = self.reverb_write_address.wrapping_add(2);
-    if self.reverb_write_address > 0xFFFF {
+    if self.reverb_write_address > 0x7FFFF {
       self.reverb_write_address = self.reverb_start_address;
     }
 
@@ -425,6 +425,15 @@ impl Spu {
     self.device.queue_audio(&[output_l, output_r]).unwrap()
   }
 
+  fn reverb_relative_addr(&self, offset: u32) -> u32 {
+    let addr = offset + self.reverb_write_address;
+    let addr = addr % self.sound_ram.len() as u32;
+    if addr < self.reverb_start_address {
+      return self.reverb_start_address + addr
+    }
+    return addr
+  }
+
   fn loadi16(&self, offset: u32) -> i16 {
     let offset = offset as usize;
 
@@ -448,7 +457,7 @@ impl Spu {
     if m_addr == 0 {
       return
     }
-    let val = ((input_sample as i32 + self.loadi16(d_addr) as i32 * self.vwall as i32 - self.loadi16(m_addr - 2) as i32) * self.viir as i32 + self.loadi16(m_addr - 2) as i32) as i16;
+    let val = ((input_sample as i32 + self.loadi16(self.reverb_relative_addr(d_addr)) as i32 * self.vwall as i32 - self.loadi16(self.reverb_relative_addr(m_addr - 2)) as i32) * self.viir as i32 + self.loadi16(self.reverb_relative_addr(m_addr - 2)) as i32) as i16;
     self.store16(m_addr, val as u16);
   }
 
