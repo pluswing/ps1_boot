@@ -417,8 +417,8 @@ impl Spu {
 
     self.reverb_left = !self.reverb_left;
 
-    let with_reverb_l = clamped_l + reverb_l;
-    let with_reverb_r = clamped_r + reverb_r;
+    let with_reverb_l = comb_out;
+    let with_reverb_r = comb_out;
 
     let output_l = apply_volume(with_reverb_l, self.main_volume_l);
     let output_r = apply_volume(with_reverb_r, self.main_volume_r);
@@ -462,27 +462,32 @@ impl Spu {
   }
 
   fn apply_comb_filter(&mut self) -> i16 {
-    let comb1 = self.loadi16(if self.reverb_left { self.mlcomb1 } else { self.mrcomb1 });
-    let comb2 = self.loadi16(if self.reverb_left { self.mlcomb2 } else { self.mrcomb2 });
-    let comb3 = self.loadi16(if self.reverb_left { self.mlcomb3 } else { self.mrcomb3 });
-    let comb4 = self.loadi16(if self.reverb_left { self.mlcomb4 } else { self.mrcomb4 });
-    let out = self.vcomb1 * comb1 + self.vcomb2 * comb2 + self.vcomb3 * comb3 + self.vcomb4 * comb4;
-    out
+    let comb1 = self.loadi16(self.reverb_relative_addr(if self.reverb_left { self.mlcomb1 } else { self.mrcomb1 }));
+    let comb2 = self.loadi16(self.reverb_relative_addr(if self.reverb_left { self.mlcomb2 } else { self.mrcomb2 }));
+    let comb3 = self.loadi16(self.reverb_relative_addr(if self.reverb_left { self.mlcomb3 } else { self.mrcomb3 }));
+    let comb4 = self.loadi16(self.reverb_relative_addr(if self.reverb_left { self.mlcomb4 } else { self.mrcomb4 }));
+
+    let c1 = self.vcomb1 as i32 * comb1 as i32;
+    let c2 = self.vcomb2 as i32 * comb2 as i32;
+    let c3 = self.vcomb3 as i32 * comb3 as i32;
+    let c4 = self.vcomb4 as i32 * comb4 as i32;
+    let out =  c1 + c2 + c3 + c4;
+    out.clamp(-0x8000, 0x7FFF) as i16
   }
 
   fn apply_all_pass_filter_1(&mut self, input_sample: i16) -> i16 {
     let mapf = if self.reverb_left { self.mlapf1 } else { self.mrapf1 };
-    let buffered = input_sample - self.vapf1 * self.loadi16(mapf - self.dapf1);
+    let buffered = input_sample - self.vapf1 * self.loadi16(self.reverb_relative_addr(mapf - self.dapf1));
     self.store16(mapf, buffered as u16);
-    let apf_out = self.vapf1 * buffered + self.loadi16(mapf - self.dapf1);
+    let apf_out = self.vapf1 * buffered + self.loadi16(self.reverb_relative_addr(mapf - self.dapf1));
     apf_out
   }
 
   fn apply_all_pass_filter_2(&mut self, input_sample: i16) -> i16 {
     let mapf = if self.reverb_left { self.mlapf2 } else { self.mrapf2 };
-    let buffered = input_sample - self.vapf2 * self.loadi16(mapf - self.dapf2);
+    let buffered = input_sample - self.vapf2 * self.loadi16(self.reverb_relative_addr(mapf - self.dapf2));
     self.store16(mapf, buffered as u16);
-    let apf_out = self.vapf2 * buffered + self.loadi16(mapf - self.dapf2);
+    let apf_out = self.vapf2 * buffered + self.loadi16(self.reverb_relative_addr(mapf - self.dapf2));
     apf_out
   }
 }
