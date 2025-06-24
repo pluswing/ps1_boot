@@ -279,8 +279,6 @@ impl Cpu {
     let offset = offset << 2;
     let mut pc = self.pc;
     pc = pc.wrapping_add(offset);
-    // FIXME next_pcを導入したことによりおそらく不要になっている
-    // pc = pc.wrapping_sub(4);
     self.next_pc = pc;
     self.branch = true;
   }

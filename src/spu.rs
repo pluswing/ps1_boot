@@ -395,15 +395,7 @@ impl Spu {
 
     // reverb
     let input_sample = if self.reverb_left { clamped_l } else { clamped_r };
-    // 同じ側のL
-    self.apply_same_side_reflection(input_sample, self.mlsame, self.dlsame);
-    // 同じ側のR
-    self.apply_same_side_reflection(input_sample, self.mrsame, self.drsame);
-    // // 異なる側LからR
-    self.apply_same_side_reflection(input_sample, self.mrdiff, self.dldiff);
-    // // 異なる側のRからL
-    self.apply_same_side_reflection(input_sample, self.mldiff, self.drdiff);
-
+    self.apply_same_side_reflection(input_sample);
     let comb_out = self.apply_comb_filter();
     let apf1_out = self.apply_all_pass_filter_1(comb_out);
     let apf2_out = self.apply_all_pass_filter_2(apf1_out);
@@ -460,10 +452,18 @@ impl Spu {
     self.sound_ram[offset + 1] = b1;
   }
 
-  fn apply_same_side_reflection(&mut self, input_sample: i16, m_addr: u32, d_addr: u32) {
-    if m_addr == 0 {
-      return
-    }
+  fn apply_same_side_reflection(&mut self, input_sample: i16) {
+      // 同じ側のL
+    self._apply_same_side_reflection(input_sample, self.mlsame, self.dlsame);
+    // 同じ側のR
+    self._apply_same_side_reflection(input_sample, self.mrsame, self.drsame);
+    // // 異なる側LからR
+    self._apply_same_side_reflection(input_sample, self.mrdiff, self.dldiff);
+    // // 異なる側のRからL
+    self._apply_same_side_reflection(input_sample, self.mldiff, self.drdiff);
+  }
+
+  fn _apply_same_side_reflection(&mut self, input_sample: i16, m_addr: u32, d_addr: u32) {
     let a = self.loadi16(self.reverb_relative_addr(d_addr));
     let b = self.loadi16(self.reverb_relative_addr(m_addr - 2));
     let val = apply_volume(input_sample + apply_volume(a, self.vwall) - b, self.viir) + b;
@@ -745,7 +745,7 @@ impl AdsrEnvelope {
   fn new() -> Self {
     Self {
       volume: 0,
-      level: 0x7FFF, // TODO MAX VOLUME
+      level: 0,
       counter: 0,
       phase: AdsrPhase::Release,
       sustain_level: 0,
