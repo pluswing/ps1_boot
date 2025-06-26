@@ -71,11 +71,12 @@ fn main() {
       gpu_counter += 1;
     }
 
-    if now2.elapsed().as_nanos() >= 1_000_000_000 {
-      println!("SPU: {}, GPU: {}", spu_counter, gpu_counter);
-      spu_counter = 0;
-      gpu_counter = 0;
-      now2 = Instant::now();
-    }
+    // let e = now2.elapsed().as_nanos();
+    // if e >= 1_000_000_000 {
+    // //   println!("SPU: {}, GPU: {}", spu_counter, gpu_counter);
+    // //   spu_counter = 0;
+    // //   gpu_counter = 0;
+    // //   now2 = Instant::now();
+    // }
   }
 }

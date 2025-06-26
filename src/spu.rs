@@ -360,7 +360,6 @@ impl Spu {
   }
 
   pub fn clock(&mut self) {
-
     let mut mixed_l = 0;
     let mut mixed_r = 0;
     let mut reverb: i32 = 0;
